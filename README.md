@@ -26,11 +26,12 @@ Some of the things I want to see in Spruce:
   to destrucure ADTs and use the contents
 * List Comprehensions: I love how quickly I can transform thought to logic
   with Python's list comprehensions.
-* JS as a Compile Target: a number of languages, for instance Elm and ReasonML
-  use JS as their primary compile target, which these days is actually very
-  pragmatic. JS runs everywhere: browsers, servers, desktop applications,
-  phones, plus it allows the language to leverage highly optimized JS runtimes
-  (A.K.A. I'm lazy and don't want to write the Garbage Collector)
+* JS as a Compile Target: a number of languages, for instance Elm and
+  ReasonML, use JS as their primary compile target, which these days is 
+  actually very pragmatic. JS runs everywhere: browsers, servers, desktop
+  applications, phones, plus it allows the language to leverage highly
+  optimized JS runtimes (A.K.A. I'm lazy and don't want to write the Garbage
+  Collector)
 
 ### Why?
 
@@ -57,6 +58,6 @@ of features. After that it'll be easier to add language and compiler features
 
 ### Do you accept PRs?
 
-Absolutely! I'm a very amature Rust programmer, so I would greatly appriceate
-the input from others more experienced (and heck, if you're an amature too
+Absolutely! I'm a very amateur Rust programmer, so I would greatly appriceate
+the input from others more experienced (and heck, if you're an amateur too
 then we'll struggle together).
