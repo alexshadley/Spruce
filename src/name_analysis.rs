@@ -71,8 +71,9 @@ pub enum Stmt {
 
 #[derive(Debug, PartialEq)]
 pub enum Target {
-    Const(SymbolID),
-    Mutable(SymbolID)
+    Var(SymbolID),
+    Mutable(SymbolID),
+    Update(SymbolID)
 }
 
 #[derive(Debug, PartialEq)]
@@ -154,26 +155,25 @@ impl SymbolTable {
     }
 
     /// Returns SymbolID if insert was successful
-    fn insert(&mut self, name: &String, sym_type: SymbolType) -> Option<SymbolID> {
+    fn attempt_insert(&mut self, name: &String, sym_type: SymbolType) -> Option<SymbolID> {
+        if self.conflicts(name) {
+            return None;
+        }
+
         let id = self.next_id;
         let ret = self.layers.first_mut().and_then(|layer| {
-            if layer.contains_key(name) {
-                None
-            }
-            else {
-                let symbol = Symbol { id: id, name: name.clone(), sym_type: sym_type };
-                layer.insert(name.clone(), symbol);
-                Some(id)
-            }
+            let symbol = Symbol { id: id, name: name.clone(), sym_type: sym_type };
+            layer.insert(name.clone(), symbol);
+            Some(id)
         });
         self.next_id += 1;
 
         ret
     }
 
-    fn lookup(&self, name: String) -> Option<&Symbol> {
+    fn lookup(&self, name: &String) -> Option<&Symbol> {
         for layer in &self.layers {
-            match layer.get(&name) {
+            match layer.get(name) {
                 Some(sym) => {
                     return Option::Some(sym);
                 }
@@ -185,9 +185,13 @@ impl SymbolTable {
     }
 
     fn conflicts(&self, name: &String) -> bool {
-        self.layers.first().and_then(|layer| {
-            layer.get(name)
-        }).is_some()
+        for layer in &self.layers {
+            if layer.get(name).is_some() {
+                return true;
+            }
+        }
+
+        false
     }
 }
 
@@ -200,17 +204,20 @@ fn collect_decls(prog: parser::Prog) -> Result<SymbolTable, String> {
         match var {
             parser::Stmt::Assign(tgt, _) => {
                 match tgt {
-                    parser::Target::Const(name) => {
+                    parser::Target::Var(name) => {
                         if table.conflicts(name) {
                             return Err(String::from(format!("'{}' declared twice", name)));
                         }
-                        table.insert(name, SymbolType::Const);
+                        table.attempt_insert(name, SymbolType::Const);
                     }
                     parser::Target::Mutable(name) => {
                         if table.conflicts(name) {
                             return Err(String::from(format!("'{}' declared twice", name)));
                         }
-                        table.insert(name, SymbolType::Mutable);
+                        table.attempt_insert(name, SymbolType::Mutable);
+                    }
+                    parser::Target::Update(_) => {
+                        return Err(String::from(format!("Updates not allowed in program level-statements")));
                     }
                 }
             }
@@ -222,10 +229,97 @@ fn collect_decls(prog: parser::Prog) -> Result<SymbolTable, String> {
         if table.conflicts(&func.name) {
             return Err(String::from(format!("'{}' declared twice", func.name)));
         }
-        table.insert(&func.name, SymbolType::Function);
+        table.attempt_insert(&func.name, SymbolType::Function);
     }
     
     Ok(table)
+}
+
+fn check_stmt(table: &mut SymbolTable, stmt: parser::Stmt) -> Result<Stmt, String> {
+    match(stmt) {
+        parser::Stmt::Assign(tgt, expr) => {
+            let new_tgt = check_target(table, tgt)?;
+            let new_expr = check_expr(table, expr)?;
+
+            Ok(Stmt::Assign(new_tgt, new_expr))
+        }
+        parser::Stmt::Case(case) => {
+            unimplemented!()
+        }
+        parser::Stmt::FnCall(name, args) => {
+            unimplemented!()
+        }
+    }
+}
+
+fn check_target(table: &mut SymbolTable, tgt: parser::Target) -> Result<Target, String> {
+    match tgt {
+        parser::Target::Var(name) => {
+            let id_result = table.attempt_insert(&name, SymbolType::Const);
+            match id_result {
+                Some(id) => Ok(Target::Var(id)),
+                None => {
+                    Err(String::from(format!("'{}' declared twice", name)))
+                }
+            }
+        }
+        parser::Target::Mutable(name) => {
+            let id_result = table.attempt_insert(&name, SymbolType::Const);
+            match id_result {
+                Some(id) => Ok(Target::Var(id)),
+                None => Err(String::from(format!("'{}' declared twice", name)))
+            }
+        }
+        parser::Target::Update(name) => {
+            let sym_result = table.lookup(&name);
+            match sym_result {
+                Some(sym) => Ok(Target::Update(sym.id)),
+                None => Err(String::from(format!("'{}' not declared before attempting update", name)))
+            }
+        }
+    }
+}
+
+fn check_expr(table: &SymbolTable, expr: parser::Expr) -> Result<Expr, String> {
+    match expr {
+        parser::Expr::Id(name) => {
+            match table.lookup(&name) {
+                Some(sym) => Ok(Expr::Id(sym.id)),
+                None => Err(String::from(format!("'{}' used but not declared", name)))
+            }
+        }
+
+        parser::Expr::Add(l, r) | parser::Expr::Subt(l, r) | parser::Expr::Mult(l, r) |
+        parser::Expr::Div(l, r) | parser::Expr::Pow(l, r) => {
+            let left = check_expr(table, *l)?;
+            let right = check_expr(table, *r)?;
+            Ok(Expr::Add(Box::from(left), Box::from(right)))
+        }
+
+        parser::Expr::FnCall(fn_name, args) => {
+            let fn_id = match table.lookup(&fn_name) {
+                Some(sym) => {
+                    if sym.sym_type != SymbolType::Function {
+                        return Err(String::from(format!("'{}' is not a function", fn_name)));
+                    }
+                    else {
+                        sym.id
+                    }
+                }
+                None => {
+                    return Err(String::from(format!("'{}' used but not declared", fn_name)));
+                }
+            };
+
+            let mut checked_args = Vec::new();
+            for arg in args {
+                let checked = check_expr(table, *arg)?;
+                checked_args.push(Box::from(checked));
+            }
+
+            Ok(Expr::FnCall(fn_id, checked_args))
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]

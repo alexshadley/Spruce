@@ -11,20 +11,21 @@ fn_args = { "(" ~ (id ~ ("," ~ id)* )? ~ ")" }
 
 assign = { target ~ "=" ~ valued }
 
-target = _{ mutable_id | id }
-mutable_id = { "mut" ~ id }
+target = _{ mutable_tgt | update_tgt | id }
+mutable_tgt = { "mut" ~ id }
+update_tgt = { id ~ ":" }
 
 // something that can be reduced to a value
 valued = _{ case | expr }
-
-expr = { term ~ (operation ~ term)* }
-term = _{ fn_call | id | num | "(" ~ expr ~ ")" }
 
 case = { "case" ~ expr ~ "{\n" ~ case_option+ ~ "}" }
 case_option = { case_pattern ~ "->" ~ (expr | "{\n" ~ body ~ "}") ~ "\n" }
 case_pattern = { id ~ ( "(" ~ id ~ ( "," ~ id )*  ~ ")")? }
 
 body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
+
+expr = { term ~ (operation ~ term)* }
+term = _{ fn_call | id | num | "(" ~ expr ~ ")" }
 
 fn_call = { id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 

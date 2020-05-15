@@ -24,6 +24,12 @@ lazy_static! {
     };
 }
 
+/*#[derive(Debug, PartialEq)]
+/pub enum Literal {
+    Int(i64),
+    Float(f64),
+}*/
+
 #[derive(Debug, PartialEq)]
 pub enum Expr {
     Add(Box<Expr>, Box<Expr>),
@@ -31,12 +37,11 @@ pub enum Expr {
     Subt(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
     Pow(Box<Expr>, Box<Expr>),
-    App(Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Box<Expr>>),
     Id(String),
+    ADTVal(String, Vec<Box<Expr>>),
     Lit(f64)
 }
-
 
 #[derive(Debug, PartialEq)]
 pub struct Body {
@@ -84,8 +89,9 @@ pub enum Stmt {
 
 #[derive(Debug, PartialEq)]
 pub enum Target {
-    Const(String),
-    Mutable(String)
+    Var(String),
+    Mutable(String),
+    Update(String)
 }
 
 #[derive(Debug, PartialEq)]
@@ -206,8 +212,9 @@ fn to_stmt(stmt: Pair<Rule>) -> Stmt {
             let mut children = stmt.into_inner();
             let tgt = children.next().unwrap();
             let target = match tgt.as_rule() {
-                Rule::id => Target::Const(String::from(tgt.as_str())),
-                Rule::mutable_id => Target::Mutable(String::from(tgt.as_str())),
+                Rule::id => Target::Var(String::from(tgt.as_str())),
+                Rule::mutable_tgt => Target::Mutable(String::from(tgt.as_str())),
+                Rule::update_tgt => Target::Update(String::from(tgt.as_str())),
                 _ => unreachable!()
             };
             let expr = to_expr(children.next().unwrap());
