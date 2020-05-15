@@ -39,7 +39,6 @@ pub enum Expr {
     Pow(Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Box<Expr>>),
     Id(String),
-    ADTVal(String, Vec<Box<Expr>>),
     Lit(f64)
 }
 

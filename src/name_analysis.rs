@@ -22,6 +22,7 @@ pub enum Expr {
     App(Box<Expr>, Box<Expr>),
     FnCall(SymbolID, Vec<Box<Expr>>),
     Id(SymbolID),
+    ADTVal(ADTValID, Vec<Box<Expr>>),
     Lit(f64)
 }
 
@@ -105,7 +106,12 @@ pub struct Prog {
 
 pub fn name_analysis(prog: parser::Prog) -> Result<SymbolTable, String> {
     let type_table = analyze_types(&prog)?;
-    let mut sym_table = collect_decls(prog)?;
+    let (mut sym_table, targets) = collect_decls(&prog)?;
+
+    for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
+        check_global(&mut sym_table, &type_table, def, target)?;
+    }
+    
     sym_table.pop_layer();
 
     Ok(sym_table)
@@ -196,10 +202,18 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: parser::Prog) -> Result<SymbolTable, String> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<Target>), String> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
+    for func in &prog.functions {
+        if table.conflicts(&func.name) {
+            return Err(String::from(format!("'{}' declared twice", func.name)));
+        }
+        table.attempt_insert(&func.name, SymbolType::Function);
+    }
+
+    let mut tgts = Vec::new();
     for var in &prog.definitions {
         match var {
             parser::Stmt::Assign(tgt, _) => {
@@ -208,13 +222,15 @@ fn collect_decls(prog: parser::Prog) -> Result<SymbolTable, String> {
                         if table.conflicts(name) {
                             return Err(String::from(format!("'{}' declared twice", name)));
                         }
-                        table.attempt_insert(name, SymbolType::Const);
+                        let id = table.attempt_insert(name, SymbolType::Const).expect("unreachable");
+                        tgts.push(Target::Var(id));
                     }
                     parser::Target::Mutable(name) => {
                         if table.conflicts(name) {
                             return Err(String::from(format!("'{}' declared twice", name)));
                         }
-                        table.attempt_insert(name, SymbolType::Mutable);
+                        let id = table.attempt_insert(name, SymbolType::Mutable).expect("unreachable");
+                        tgts.push(Target::Mutable(id));
                     }
                     parser::Target::Update(_) => {
                         return Err(String::from(format!("Updates not allowed in program level-statements")));
@@ -224,22 +240,26 @@ fn collect_decls(prog: parser::Prog) -> Result<SymbolTable, String> {
             _ => unreachable!()
         }
     }
-
-    for func in &prog.functions {
-        if table.conflicts(&func.name) {
-            return Err(String::from(format!("'{}' declared twice", func.name)));
-        }
-        table.attempt_insert(&func.name, SymbolType::Function);
-    }
     
-    Ok(table)
+    Ok((table, tgts))
 }
 
-fn check_stmt(table: &mut SymbolTable, stmt: parser::Stmt) -> Result<Stmt, String> {
-    match(stmt) {
+fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt, tgt: Target) -> Result<Stmt, String> {
+    match stmt {
+        parser::Stmt::Assign(_, expr) => {
+            let new_expr = check_expr(table, types, expr)?;
+
+            Ok(Stmt::Assign(tgt, new_expr))
+        }
+        _ => unreachable!()
+    }
+}
+
+fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -> Result<Stmt, String> {
+    match stmt {
         parser::Stmt::Assign(tgt, expr) => {
             let new_tgt = check_target(table, tgt)?;
-            let new_expr = check_expr(table, expr)?;
+            let new_expr = check_expr(table, types, expr)?;
 
             Ok(Stmt::Assign(new_tgt, new_expr))
         }
@@ -252,7 +272,7 @@ fn check_stmt(table: &mut SymbolTable, stmt: parser::Stmt) -> Result<Stmt, Strin
     }
 }
 
-fn check_target(table: &mut SymbolTable, tgt: parser::Target) -> Result<Target, String> {
+fn check_target(table: &mut SymbolTable, tgt: &parser::Target) -> Result<Target, String> {
     match tgt {
         parser::Target::Var(name) => {
             let id_result = table.attempt_insert(&name, SymbolType::Const);
@@ -280,7 +300,7 @@ fn check_target(table: &mut SymbolTable, tgt: parser::Target) -> Result<Target, 
     }
 }
 
-fn check_expr(table: &SymbolTable, expr: parser::Expr) -> Result<Expr, String> {
+fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Result<Expr, String> {
     match expr {
         parser::Expr::Id(name) => {
             match table.lookup(&name) {
@@ -289,41 +309,58 @@ fn check_expr(table: &SymbolTable, expr: parser::Expr) -> Result<Expr, String> {
             }
         }
 
+        parser::Expr::Lit(val) => Ok(Expr::Lit(*val)),
+
         parser::Expr::Add(l, r) | parser::Expr::Subt(l, r) | parser::Expr::Mult(l, r) |
         parser::Expr::Div(l, r) | parser::Expr::Pow(l, r) => {
-            let left = check_expr(table, *l)?;
-            let right = check_expr(table, *r)?;
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
             Ok(Expr::Add(Box::from(left), Box::from(right)))
         }
 
         parser::Expr::FnCall(fn_name, args) => {
-            let fn_id = match table.lookup(&fn_name) {
-                Some(sym) => {
+            match (table.lookup(&fn_name), types.get_value(&fn_name)) {
+
+                (Some(sym), _) => {
                     if sym.sym_type != SymbolType::Function {
                         return Err(String::from(format!("'{}' is not a function", fn_name)));
                     }
                     else {
-                        sym.id
+                        let mut checked_args = Vec::new();
+                        for arg in args {
+                            let checked = check_expr(table, types, &**arg)?;
+                            checked_args.push(Box::from(checked));
+                        }
+
+                        Ok(Expr::FnCall(sym.id, checked_args))
                     }
                 }
-                None => {
+
+                (_, Some(value)) => {
+                    let mut checked_args = Vec::new();
+                    for arg in args {
+                        let checked = check_expr(table, types, &**arg)?;
+                        checked_args.push(Box::from(checked));
+                    }
+
+                    Ok(Expr::ADTVal(value.id, checked_args))
+                }
+
+                (None, None) => {
                     return Err(String::from(format!("'{}' used but not declared", fn_name)));
                 }
-            };
-
-            let mut checked_args = Vec::new();
-            for arg in args {
-                let checked = check_expr(table, *arg)?;
-                checked_args.push(Box::from(checked));
             }
-
-            Ok(Expr::FnCall(fn_id, checked_args))
         }
+
+
     }
 }
 
+type ADTValID = u32;
+
 #[derive(Debug, PartialEq)]
 struct ADTValue {
+    id: ADTValID,
     name: String,
     args: Vec<String>,
     data_type: String
@@ -331,16 +368,16 @@ struct ADTValue {
 
 #[derive(Debug, PartialEq)]
 struct ADT {
-    name: String,
-    values: Vec<ADTValue>
+    name: String
 }
 
 #[derive(Debug, PartialEq)]
 struct TypeTable {
+    next_id: ADTValID,
     primitives: HashSet<String>,
     types: HashMap<String, ADT>,
     // directory of values and the types they belongto
-    values: HashMap<String, String>
+    values: HashMap<String, ADTValue>
 }
 
 
@@ -349,19 +386,20 @@ impl TypeTable {
         // TODO: figure out the proper way to do this in rust
         let primitives = vec![String::from("Int"), String::from("Float")];
 
-        TypeTable {primitives: HashSet::from_iter(primitives), types: HashMap::default(), values: HashMap::default()}
+        TypeTable {next_id: 0, primitives: HashSet::from_iter(primitives), types: HashMap::default(), values: HashMap::default()}
     }
 
     fn add_type(&mut self, dt: ADT) {
         self.types.insert(dt.name.clone(), dt);
     }
 
-    fn add_value(&mut self, val: ADTValue) {
-        let mut r = self.types.get_mut(&val.data_type);
+    fn add_value(&mut self, name: &String, args: &Vec<String>, data_type: &String) {
+        let mut r = self.types.get_mut(data_type);
         match r {
             Some(adt) => {
-                self.values.insert(val.name.clone(), val.data_type.clone());
-                adt.values.push(val);
+                let new_val = ADTValue {name: name.clone(), args: args.clone(), data_type: adt.name.clone(), id: self.next_id};
+                self.next_id += 1;
+                self.values.insert(new_val.name.clone(), new_val);
             }
             None => unreachable!()
         }
@@ -371,9 +409,9 @@ impl TypeTable {
         self.types.get(name)
     }
 
-    /*fn getTypeMut(&mut self, name: &'a String) -> Option<&'a mut ADT> {
-        self.types.get_mut(name)
-    }*/
+    fn get_value(&self, name: &String) -> Option<&ADTValue> {
+        self.values.get(name)
+    }
 
     fn has_type(&self, name: &String) -> bool {
         self.types.contains_key(name) || self.primitives.contains(name)
@@ -398,7 +436,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, String>{
             return Err(String::from(format!("{} is an invalid type name: types must be uppercase", t.name)))
         }
 
-        let new_type = ADT {name: t.name.clone(), values: vec![] };
+        let new_type = ADT {name: t.name.clone() };
         type_table.add_type(new_type)
     }
 
@@ -413,15 +451,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, String>{
                 }
             }
 
-            match type_table.get_type(&t.name) {
-                Some(adt) => {
-                    let new_val = ADTValue {name: v.name.clone(), args: v.args.clone(), data_type: adt.name.clone()};
-                    type_table.add_value(new_val);
-                }
-                None => {
-                    unreachable!()
-                }
-            }
+            type_table.add_value(&v.name, &v.args, &t.name);
         }
     }
 

@@ -10,7 +10,7 @@ mod parser;
 mod name_analysis;
 
 fn main() {
-    let unparsed_file = fs::read_to_string("src/test.sp").expect("cannot read file");
+    let unparsed_file = fs::read_to_string("src/globals.sp").expect("cannot read file");
 
     let prog = parser::parse(&unparsed_file).expect("Parse failed");
     println!("{:#?}", prog);

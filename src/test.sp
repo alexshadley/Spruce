@@ -1,7 +1,7 @@
 x = 0
 
 addGlob(n) {
-    x = x + n
+    x := x + n
     x
 }
 
