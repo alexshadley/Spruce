@@ -50,7 +50,7 @@ getting Spruce to compile:
 | --------- | ------ |
 | Parser    | Done!  |
 | Name Analysis | Seems to work! Not fully tested |
-| Codegen   | Not yet started |
+| Codegen   | Half-implemented. Currently broken but we're getting there |
 
 Once this is complete we will have Spruce compiling with a very bare-bones set
 of features. After that it'll be easier to add language and compiler features

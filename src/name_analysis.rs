@@ -34,8 +34,9 @@ pub struct Body {
 
 #[derive(Debug, PartialEq)]
 pub struct Case {
-    expr: Expr,
-    options: Vec<CaseOption>
+    pub id: CaseID,
+    pub expr: Expr,
+    pub options: Vec<CaseOption>
 }
 
 #[derive(Debug, PartialEq)]
@@ -99,13 +100,14 @@ pub struct Func {
 pub struct Prog {
     pub functions: Vec<Func>,
     pub definitions: Vec<Stmt>,
+    pub types: Vec<Type>,
     pub symbol_table: SymbolTable,
-    pub type_table: TypeTable
+    pub type_table: TypeTableExt
 }
 
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, String> {
-    let type_table = analyze_types(&prog)?;
+    let (types, type_table) = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
     let mut defs = Vec::new();
@@ -120,11 +122,12 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, String> {
     
     sym_table.pop_layer();
 
-    let out_prog = Prog {functions: funcs, definitions: defs, symbol_table: sym_table, type_table: type_table };
+    let out_prog = Prog {functions: funcs, definitions: defs, types: types, symbol_table: sym_table, type_table: type_table.to_ext() };
     Ok(out_prog)
 }
 
 pub type SymbolID = u32;
+pub type CaseID = u32;
 
 #[derive(Debug, PartialEq)]
 pub enum SymbolType {
@@ -145,13 +148,14 @@ type SymbolLayer = HashMap<String, Symbol>;
 #[derive(Debug, PartialEq)]
 pub struct SymbolTable {
     next_id: SymbolID,
+    next_case_id: CaseID,
     layers: Vec<SymbolLayer>,
     store: HashMap<SymbolID, Symbol>
 }
 
 impl SymbolTable {
     fn new() -> Self {
-        SymbolTable { next_id: 0, layers: vec![], store: HashMap::new() }
+        SymbolTable { next_id: 0, next_case_id: 0, layers: vec![], store: HashMap::new() }
     }
 
     fn push_layer(&mut self) {
@@ -210,6 +214,11 @@ impl SymbolTable {
         }
 
         false
+    }
+
+    fn new_case_id(&mut self) -> CaseID {
+        self.next_case_id += 1;
+        self.next_case_id - 1
     }
 }
 
@@ -315,6 +324,8 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -
             Ok(Stmt::Assign(new_tgt, new_expr))
         }
         parser::Stmt::Case(case) => {
+            let id = table.new_case_id();
+
             let expr = check_expr(table, types, &case.expr)?;
 
             let mut options = Vec::new();
@@ -322,7 +333,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -
                 options.push(check_case_option(table, types, opt)?);
             }
 
-            Ok(Stmt::Case(Case {expr: expr, options: options}))
+            Ok(Stmt::Case(Case {id: id, expr: expr, options: options}))
         }
         parser::Stmt::FnCall(name, args) => {
             match table.lookup(&name) {
@@ -470,18 +481,18 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Re
     }
 }
 
-type ADTValID = u32;
+pub type ADTValID = u32;
 
 #[derive(Debug, PartialEq)]
-struct ADTValue {
-    id: ADTValID,
-    name: String,
-    args: Vec<String>,
-    data_type: String
+pub struct ADTValue {
+    pub id: ADTValID,
+    pub name: String,
+    pub args: Vec<String>,
+    pub data_type: String
 }
 
 #[derive(Debug, PartialEq)]
-struct ADT {
+pub struct ADT {
     name: String
 }
 
@@ -490,8 +501,15 @@ struct TypeTable {
     next_id: ADTValID,
     primitives: HashSet<String>,
     types: HashMap<String, ADT>,
-    // directory of values and the types they belongto
     values: HashMap<String, ADTValue>
+}
+
+/// Version of type table that is exported. Note that values are indexed by
+/// SymbolID. The approach to type symbols needs to be better thought out
+#[derive(Debug, PartialEq)]
+pub struct TypeTableExt {
+    pub types: HashMap<String, ADT>,
+    pub values: HashMap<SymbolID, ADTValue>
 }
 
 
@@ -519,11 +537,11 @@ impl TypeTable {
         }
     }
 
-    fn get_type(&self, name: &String) -> Option<&ADT> {
+    pub fn get_type(&self, name: &String) -> Option<&ADT> {
         self.types.get(name)
     }
 
-    fn get_value(&self, name: &String) -> Option<&ADTValue> {
+    pub fn get_value(&self, name: &String) -> Option<&ADTValue> {
         self.values.get(name)
     }
 
@@ -534,11 +552,18 @@ impl TypeTable {
     fn has_value(&self, name: &String) -> bool {
         self.values.contains_key(name)
     }
+
+    fn to_ext(self) -> TypeTableExt {
+        TypeTableExt {
+            types: self.types,
+            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect()
+        }
+    }
 }
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, String>{
+fn analyze_types(prog: & parser::Prog) -> Result<(Vec<Type>, TypeTable), String>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
@@ -569,5 +594,12 @@ fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, String>{
         }
     }
 
-    Ok(type_table)
+    let new_types = prog.types.iter().map(|t| {
+        Type {
+            name: t.name.clone(),
+            options: t.options.iter().map(|o| { TypeOption {name: o.name.clone(), args: o.args.clone() } }).collect()
+        }
+    }).collect();
+
+    Ok((new_types, type_table))
 }

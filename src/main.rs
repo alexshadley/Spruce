@@ -16,7 +16,9 @@ fn main() {
     let prog = parser::parse(&unparsed_file).expect("Parse failed");
     println!("{:#?}", prog);
 
-    let analyzed_prog = name_analysis::name_analysis(prog);
+    let analyzed_prog = name_analysis::name_analysis(prog).expect("Name analysis failed");
     println!("{:#?}", analyzed_prog);
 
+    let mut out_file = fs::File::create("out.js").expect("failed to create file");
+    codegen::gen_prog(&mut out_file, &analyzed_prog);
 }
