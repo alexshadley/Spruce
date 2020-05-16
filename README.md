@@ -49,7 +49,7 @@ getting Spruce to compile:
 | Component | Status |
 | --------- | ------ |
 | Parser    | Done!  |
-| Name Analysis | Works for types, the rest still in progress |
+| Name Analysis | Seems to work! Not fully tested |
 | Codegen   | Not yet started |
 
 Once this is complete we will have Spruce compiling with a very bare-bones set
