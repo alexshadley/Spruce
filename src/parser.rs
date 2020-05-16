@@ -50,8 +50,8 @@ pub struct Body {
 
 #[derive(Debug, PartialEq)]
 pub struct Case {
-    expr: Expr,
-    options: Vec<CaseOption>
+    pub expr: Expr,
+    pub options: Vec<CaseOption>
 }
 
 #[derive(Debug, PartialEq)]
@@ -212,8 +212,8 @@ fn to_stmt(stmt: Pair<Rule>) -> Stmt {
             let tgt = children.next().unwrap();
             let target = match tgt.as_rule() {
                 Rule::id => Target::Var(String::from(tgt.as_str())),
-                Rule::mutable_tgt => Target::Mutable(String::from(tgt.as_str())),
-                Rule::update_tgt => Target::Update(String::from(tgt.as_str())),
+                Rule::mutable_tgt => Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str())),
+                Rule::update_tgt => Target::Update(String::from(tgt.into_inner().next().unwrap().as_str())),
                 _ => unreachable!()
             };
             let expr = to_expr(children.next().unwrap());

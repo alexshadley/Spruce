@@ -41,8 +41,8 @@ pub struct Case {
 
 #[derive(Debug, PartialEq)]
 pub struct CasePattern {
-    pub base: String,
-    pub args: Vec<String> 
+    pub base: ADTValID,
+    pub args: Vec<SymbolID> 
 }
 
 #[derive(Debug, PartialEq)]
@@ -92,7 +92,7 @@ pub struct TypeOption {
 #[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
-    pub args: Vec<String>,
+    pub args: Vec<SymbolID>,
     pub body: Body
 }
 
@@ -106,10 +106,14 @@ pub struct Prog {
 
 pub fn name_analysis(prog: parser::Prog) -> Result<SymbolTable, String> {
     let type_table = analyze_types(&prog)?;
-    let (mut sym_table, targets) = collect_decls(&prog)?;
+    let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
     for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
         check_global(&mut sym_table, &type_table, def, target)?;
+    }
+
+    for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
+        check_function(&mut sym_table, &type_table, func, id)?;
     }
     
     sym_table.pop_layer();
@@ -167,7 +171,7 @@ impl SymbolTable {
         }
 
         let id = self.next_id;
-        let ret = self.layers.first_mut().and_then(|layer| {
+        let ret = self.layers.last_mut().and_then(|layer| {
             let symbol = Symbol { id: id, name: name.clone(), sym_type: sym_type };
             layer.insert(name.clone(), symbol);
             Some(id)
@@ -178,7 +182,7 @@ impl SymbolTable {
     }
 
     fn lookup(&self, name: &String) -> Option<&Symbol> {
-        for layer in &self.layers {
+        for layer in self.layers.iter().rev() {
             match layer.get(name) {
                 Some(sym) => {
                     return Option::Some(sym);
@@ -190,8 +194,9 @@ impl SymbolTable {
         None
     }
 
+    // TODO: allow variable shadowing
     fn conflicts(&self, name: &String) -> bool {
-        for layer in &self.layers {
+        for layer in self.layers.iter().rev() {
             if layer.get(name).is_some() {
                 return true;
             }
@@ -202,15 +207,17 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<Target>), String> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<Target>), String> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
+    let mut fn_ids = Vec::new();
     for func in &prog.functions {
         if table.conflicts(&func.name) {
             return Err(String::from(format!("'{}' declared twice", func.name)));
         }
-        table.attempt_insert(&func.name, SymbolType::Function);
+        let id = table.attempt_insert(&func.name, SymbolType::Function).expect("unreachable");
+        fn_ids.push(id);
     }
 
     let mut tgts = Vec::new();
@@ -241,7 +248,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<Target>), Stri
         }
     }
     
-    Ok((table, tgts))
+    Ok((table, fn_ids, tgts))
 }
 
 fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt, tgt: Target) -> Result<Stmt, String> {
@@ -255,6 +262,43 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt,
     }
 }
 
+fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Func, id: SymbolID) -> Result<Func, String> {
+    table.push_layer();
+
+    let mut arg_symbols = Vec::new();
+    for arg in &func.args {
+        match table.attempt_insert(&arg, SymbolType::Const) {
+            Some(id) => {
+                arg_symbols.push(id);
+            }
+            None => {
+                // TODO: implement variable shadowing with arguments
+                return Err(String::from(format!("'{}' declared twice (as arg)", arg)));
+            }
+        }
+    }
+
+    let body = check_body(table, types, &func.body)?;
+
+    table.pop_layer();
+
+    Ok(Func {name: id, args: arg_symbols, body: body})
+}
+
+fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::Body) -> Result<Body, String> {
+    let mut stmts = Vec::new();
+    for stmt in &body.stmts {
+        stmts.push(check_stmt(table, types, stmt)?);
+    }
+
+    let expr = match &body.expr {
+        Some(e) => Some(check_expr(table, types, &e)?),
+        None => None
+    };
+
+    Ok(Body {stmts: stmts, expr: expr})
+}
+
 fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -> Result<Stmt, String> {
     match stmt {
         parser::Stmt::Assign(tgt, expr) => {
@@ -264,12 +308,74 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -
             Ok(Stmt::Assign(new_tgt, new_expr))
         }
         parser::Stmt::Case(case) => {
-            unimplemented!()
+            let expr = check_expr(table, types, &case.expr)?;
+
+            let mut options = Vec::new();
+            for opt in &case.options {
+                options.push(check_case_option(table, types, opt)?);
+            }
+
+            Ok(Stmt::Case(Case {expr: expr, options: options}))
         }
         parser::Stmt::FnCall(name, args) => {
-            unimplemented!()
+            match table.lookup(&name) {
+                Some(sym) => {
+                    if sym.sym_type != SymbolType::Function {
+                        Err(String::from(format!("'{}' is not a function", name)))
+                    }
+                    else {
+                        let mut checked_args = Vec::new();
+                        for arg in args {
+                            let checked = check_expr(table, types, &arg)?;
+                            checked_args.push(checked);
+                        }
+
+                        Ok(Stmt::FnCall(sym.id, checked_args))
+                    }
+                }
+                None => Err(String::from(format!("'{}' used but not declared", name)))
+            }
         }
     }
+}
+
+fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOption) -> Result<CaseOption, String> {
+    table.push_layer();
+    let pattern = check_case_pattern(table, types, &opt.pattern)?;
+    let body = match &opt.body {
+        parser::CaseBody::Body(body) => CaseBody::Body(check_body(table, types, &body)?),
+        parser::CaseBody::Expr(expr) => CaseBody::Expr(check_expr(table, types, &expr)?)
+    };
+    table.pop_layer();
+
+    Ok(CaseOption {pattern: pattern, body: body })
+}
+
+fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePattern) -> Result<CasePattern, String> {
+    let id = match types.get_value(&pattern.base) {
+        Some(val) => {
+            val.id
+        }
+        None => {
+            return Err(String::from(format!("'{}' is not an ADT value", pattern.base)))
+        }
+    };
+
+    let mut arg_symbols = Vec::new();
+    for arg in &pattern.args {
+        match table.attempt_insert(&arg, SymbolType::Const) {
+            Some(id) => {
+                arg_symbols.push(id);
+            }
+            None => {
+                // TODO: implement variable shadowing with arguments
+                return Err(String::from(format!("'{}' declared twice (as arg)", arg)));
+            }
+        }
+    }
+
+
+    Ok(CasePattern {base: id, args: arg_symbols})
 }
 
 fn check_target(table: &mut SymbolTable, tgt: &parser::Target) -> Result<Target, String> {
@@ -284,16 +390,21 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::Target) -> Result<Target,
             }
         }
         parser::Target::Mutable(name) => {
-            let id_result = table.attempt_insert(&name, SymbolType::Const);
+            let id_result = table.attempt_insert(&name, SymbolType::Mutable);
             match id_result {
-                Some(id) => Ok(Target::Var(id)),
+                Some(id) => Ok(Target::Mutable(id)),
                 None => Err(String::from(format!("'{}' declared twice", name)))
             }
         }
         parser::Target::Update(name) => {
             let sym_result = table.lookup(&name);
             match sym_result {
-                Some(sym) => Ok(Target::Update(sym.id)),
+                Some(sym) => {
+                    match sym.sym_type {
+                        SymbolType::Mutable => Ok(Target::Update(sym.id)),
+                        _ => Err(String::from(format!("attempt to update non-mutable '{}'", name)))
+                    }
+                }
                 None => Err(String::from(format!("'{}' not declared before attempting update", name)))
             }
         }
@@ -303,9 +414,10 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::Target) -> Result<Target,
 fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Result<Expr, String> {
     match expr {
         parser::Expr::Id(name) => {
-            match table.lookup(&name) {
-                Some(sym) => Ok(Expr::Id(sym.id)),
-                None => Err(String::from(format!("'{}' used but not declared", name)))
+            match (table.lookup(&name), types.get_value(&name)) {
+                (Some(sym), _) => Ok(Expr::Id(sym.id)),
+                (_, Some(val)) => Ok(Expr::ADTVal(val.id, vec![])),
+                (None, None) => Err(String::from(format!("'{}' used but not declared", name)))
             }
         }
 
@@ -322,18 +434,13 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Re
             match (table.lookup(&fn_name), types.get_value(&fn_name)) {
 
                 (Some(sym), _) => {
-                    if sym.sym_type != SymbolType::Function {
-                        return Err(String::from(format!("'{}' is not a function", fn_name)));
+                    let mut checked_args = Vec::new();
+                    for arg in args {
+                        let checked = check_expr(table, types, &**arg)?;
+                        checked_args.push(Box::from(checked));
                     }
-                    else {
-                        let mut checked_args = Vec::new();
-                        for arg in args {
-                            let checked = check_expr(table, types, &**arg)?;
-                            checked_args.push(Box::from(checked));
-                        }
 
-                        Ok(Expr::FnCall(sym.id, checked_args))
-                    }
+                    Ok(Expr::FnCall(sym.id, checked_args))
                 }
 
                 (_, Some(value)) => {
