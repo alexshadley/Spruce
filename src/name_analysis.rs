@@ -19,7 +19,6 @@ pub enum Expr {
     Subt(Box<Expr>, Box<Expr>),
     Div(Box<Expr>, Box<Expr>),
     Pow(Box<Expr>, Box<Expr>),
-    App(Box<Expr>, Box<Expr>),
     FnCall(SymbolID, Vec<Box<Expr>>),
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<Expr>>),
@@ -100,28 +99,32 @@ pub struct Func {
 pub struct Prog {
     pub functions: Vec<Func>,
     pub definitions: Vec<Stmt>,
-    pub types: Vec<Type>
+    pub symbol_table: SymbolTable,
+    pub type_table: TypeTable
 }
 
 
-pub fn name_analysis(prog: parser::Prog) -> Result<SymbolTable, String> {
+pub fn name_analysis(prog: parser::Prog) -> Result<Prog, String> {
     let type_table = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
+    let mut defs = Vec::new();
     for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
-        check_global(&mut sym_table, &type_table, def, target)?;
+        defs.push(check_global(&mut sym_table, &type_table, def, target)?);
     }
 
+    let mut funcs = Vec::new();
     for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
-        check_function(&mut sym_table, &type_table, func, id)?;
+        funcs.push(check_function(&mut sym_table, &type_table, func, id)?);
     }
     
     sym_table.pop_layer();
 
-    Ok(sym_table)
+    let out_prog = Prog {functions: funcs, definitions: defs, symbol_table: sym_table, type_table: type_table };
+    Ok(out_prog)
 }
 
-type SymbolID = u32;
+pub type SymbolID = u32;
 
 #[derive(Debug, PartialEq)]
 pub enum SymbolType {
@@ -132,9 +135,9 @@ pub enum SymbolType {
 
 #[derive(Debug, PartialEq)]
 pub struct Symbol {
-    id: SymbolID,
-    name: String,
-    sym_type: SymbolType
+    pub id: SymbolID,
+    pub name: String,
+    pub sym_type: SymbolType
 }
 
 type SymbolLayer = HashMap<String, Symbol>;
@@ -192,6 +195,10 @@ impl SymbolTable {
         }
 
         None
+    }
+
+    pub fn lookup_id(&self, id: &SymbolID) -> Option<&Symbol> {
+        self.store.get(id)
     }
 
     // TODO: allow variable shadowing
