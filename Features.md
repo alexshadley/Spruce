@@ -95,3 +95,10 @@ are implemented.
 The current parser can take language into an AST, but it lacks any
 understanding of indentation, and as such can't currently parse multiline
 statements.
+
+## Codegen
+
+| Feature | Status |
+|---------|--------|
+| Code Generation | :heavy_check_mark: |
+| Indentation | |
