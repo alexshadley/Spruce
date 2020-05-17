@@ -1,0 +1,4 @@
+type Bool {
+    True
+    False
+}

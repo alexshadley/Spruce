@@ -22,7 +22,13 @@ pub enum Expr {
     FnCall(SymbolID, Vec<Box<Expr>>),
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<Expr>>),
-    Lit(f64)
+    Lit(f64),
+    Eq(Box<Expr>, Box<Expr>),
+    NotEq(Box<Expr>, Box<Expr>),
+    LtEq(Box<Expr>, Box<Expr>),
+    GtEq(Box<Expr>, Box<Expr>),
+    Lt(Box<Expr>, Box<Expr>),
+    Gt(Box<Expr>, Box<Expr>),
 }
 
 
@@ -441,11 +447,60 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Re
 
         parser::Expr::Lit(val) => Ok(Expr::Lit(*val)),
 
-        parser::Expr::Add(l, r) | parser::Expr::Subt(l, r) | parser::Expr::Mult(l, r) |
-        parser::Expr::Div(l, r) | parser::Expr::Pow(l, r) => {
+        parser::Expr::Add(l, r) => {
             let left = check_expr(table, types, &**l)?;
             let right = check_expr(table, types, &**r)?;
             Ok(Expr::Add(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Subt(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Subt(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Mult(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Mult(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Div(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Div(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Pow(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Pow(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Eq(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Eq(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::NotEq(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::NotEq(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::LtEq(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::LtEq(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::GtEq(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::GtEq(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Lt(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Lt(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Gt(l, r) => {
+            let left = check_expr(table, types, &**l)?;
+            let right = check_expr(table, types, &**r)?;
+            Ok(Expr::Gt(Box::from(left), Box::from(right)))
         }
 
         parser::Expr::FnCall(fn_name, args) => {

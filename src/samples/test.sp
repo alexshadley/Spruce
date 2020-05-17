@@ -68,6 +68,13 @@ add(a, b) {
     a + b
 }
 
+fib(n) {
+    case n > 1 {
+        True  -> fib(n-1) + fib(n-2)
+        False -> n
+    }
+}
+
 main() {
     addGlob(10)
 
@@ -77,6 +84,6 @@ main() {
     myVal := map(myVal, inc)
 
     mut myList = Cons(1.0, Cons(2.0, Cons(3.0, Nil)))
-    myList := listMap(myList, inc)
+    myList := listMap(myList, fib)
     listReduce(add, 0, myList)
 }

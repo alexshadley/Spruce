@@ -5,6 +5,9 @@ use std::io::Write;
 use crate::name_analysis::*;
 
 pub fn gen_prog(out: &mut fs::File, prog: &Prog) {
+    let js_helpers = fs::read_to_string("src/helper.js").expect("cannot read js helpers file");
+    write!(out, "{}", js_helpers).expect("failed to write helpers");
+
     for t in &prog.types {
         write!(out, "{}", gen_type(prog, t)).expect("failed to write line");
     }
@@ -157,6 +160,12 @@ fn gen_expr(prog: &Prog, expr: &Expr) -> String {
         Expr::Mult(left, right) => format!("({} * {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Div(left, right) => format!("({} / {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Pow(left, right) => unimplemented!(),
+        Expr::Eq(left, right) => format!("_to_bool({} == {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::NotEq(left, right) => format!("_to_bool({} != {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::LtEq(left, right) => format!("_to_bool({} <= {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::GtEq(left, right) => format!("_to_bool({} >= {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::Lt(left, right) => format!("_to_bool({} < {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::Gt(left, right) => format!("_to_bool({} > {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Lit(l) => format!("{}", l),
         Expr::Id(id) => gen_sym(&prog.symbol_table, id),
         Expr::FnCall(fn_id, args) => {

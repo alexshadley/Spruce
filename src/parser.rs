@@ -17,6 +17,8 @@ lazy_static! {
         use Assoc::*;
 
         PrecClimber::new(vec![
+            Operator::new(eq, Left) | Operator::new(not_eq, Left),
+            Operator::new(lt_eq, Left) | Operator::new(gt_eq, Left) | Operator::new(lt, Left) | Operator::new(gt, Left),
             Operator::new(add, Left) | Operator::new(subtract, Left),
             Operator::new(multiply, Left) | Operator::new(divide, Left),
             Operator::new(power, Right),
@@ -39,7 +41,13 @@ pub enum Expr {
     Pow(Box<Expr>, Box<Expr>),
     FnCall(String, Vec<Box<Expr>>),
     Id(String),
-    Lit(f64)
+    Lit(f64),
+    Eq(Box<Expr>, Box<Expr>),
+    NotEq(Box<Expr>, Box<Expr>),
+    LtEq(Box<Expr>, Box<Expr>),
+    GtEq(Box<Expr>, Box<Expr>),
+    Lt(Box<Expr>, Box<Expr>),
+    Gt(Box<Expr>, Box<Expr>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -141,6 +149,12 @@ fn to_expr(expr: Pair<Rule>) -> Expr {
             Rule::multiply => Expr::Mult(Box::from(lhs), Box::from(rhs)),
             Rule::divide   => Expr::Div(Box::from(lhs), Box::from(rhs)),
             Rule::power    => Expr::Pow(Box::from(lhs), Box::from(rhs)),
+            Rule::eq       => Expr::Eq(Box::from(lhs), Box::from(rhs)),
+            Rule::not_eq   => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
+            Rule::lt_eq    => Expr::LtEq(Box::from(lhs), Box::from(rhs)),
+            Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
+            Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
+            Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
             _ => unreachable!(),
         },
     )
