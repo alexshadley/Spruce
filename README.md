@@ -41,20 +41,14 @@ but I do believe a tool like this doesn't exist yet and totally should.
 
 ### Is it ready for me to use?
 
-Spruce has a long way to go before it's able to compile, and even after it's
-compiling there will inevitably be turmoil before it's stable enough for any
-serious software to be written with it. Here's the breakdown on the status of
-getting Spruce to compile:
+Spruce does technically compile! However, we are currently compiling on a
+heavily reduced feature set that would make real programs difficult to
+develop. Additionally, the language's syntax and semantics are prone to change
+at any point, so Spruce is not yet suited for real production applications.
 
-| Component | Status |
-| --------- | ------ |
-| Parser    | Done!  |
-| Name Analysis | Seems to work! Not fully tested |
-| Codegen   | Half-implemented. Currently broken but we're getting there |
+And that's not even to mention library support!
 
-Once this is complete we will have Spruce compiling with a very bare-bones set
-of features. After that it'll be easier to add language and compiler features
-(such as multiple assignment and type checking).
+[Track the progress of these features here](Features.md)
 
 ### Do you accept PRs?
 
