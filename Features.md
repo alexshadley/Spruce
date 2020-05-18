@@ -101,4 +101,4 @@ statements.
 | Feature | Status |
 |---------|--------|
 | Code Generation | :heavy_check_mark: |
-| Indentation | |
+| Indentation | :heavy_check_mark: |

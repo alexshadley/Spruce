@@ -13,12 +13,12 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog) {
     }
 
     for def in &prog.definitions {
-        let (stmt_str, _) = gen_stmt(prog, def);
+        let (stmt_str, _) = gen_stmt(prog, def, 0);
         write!(out, "{}", stmt_str).expect("failed to write line");
     }
 
     for func in &prog.functions {
-        write!(out, "{}", gen_func(prog, func)).expect("failed to write line");
+        write!(out, "{}", gen_func(prog, func, 0)).expect("failed to write line");
     }
 }
 
@@ -26,7 +26,7 @@ fn gen_type(prog: &Prog, t: &Type) -> String {
     let mut output = format!("const {} = {{\n", t.name);
 
     for opt in &t.options {
-        output = format!("{}{}: '{}',\n", output, opt.name.to_ascii_uppercase(), opt.name);
+        output = append_line(&output, format!("{}: '{}',\n", opt.name.to_ascii_uppercase(), opt.name), 1);
     }
 
     output = format!("{}}}\n", output);
@@ -34,8 +34,10 @@ fn gen_type(prog: &Prog, t: &Type) -> String {
     output
 }
 
-fn gen_func(prog: &Prog, func: &Func) -> String {
-    let mut output = format!("function {}(", gen_sym(&prog.symbol_table, &func.name));
+fn gen_func(prog: &Prog, func: &Func, indent: usize) -> String {
+    let mut output = append_line(&String::from(""), format!("function {}(", gen_sym(&prog.symbol_table, &func.name)), indent);
+
+    let body_indent = indent + 1;
 
     func.args.first().as_ref().map(|arg| {
         output = format!("{}{}", output, gen_sym(&prog.symbol_table, arg));
@@ -45,32 +47,32 @@ fn gen_func(prog: &Prog, func: &Func) -> String {
     };
 
     output = format!("{}){{\n", output);
-    let (body_str, body_val) = gen_body(prog, &func.body);
+    let (body_str, body_val) = gen_body(prog, &func.body, body_indent);
     output = format!("{}{}", output, body_str);
 
     body_val.map(|val| {
-        output = format!("{}return {};\n", output, val);
+        output = append_line(&output, format!("return {};\n", val), body_indent);
     });
 
-    format!("{}}}\n", output)
+    append_line(&output, String::from("}\n"), indent)
 }
 
-fn gen_body(prog: &Prog, body: &Body) -> (String, Option<String>) {
+fn gen_body(prog: &Prog, body: &Body, indent: usize) -> (String, Option<String>) {
     let mut output = String::from("");
 
     for stmt in &body.stmts {
-        let (stmt_str, _) = gen_stmt(prog, &stmt);
-        output = format!("{}{}", output, stmt_str);
+        let (stmt_str, _) = gen_stmt(prog, &stmt, indent);
+        output = append_line(&output, stmt_str, indent);
     }
 
     body.expr.as_ref().map(|expr| {
-        output = format!("{}var _body_val = {};\n", output, gen_expr(prog, &expr));
+        output = append_line(&output, format!("var _body_val = {};\n", gen_expr(prog, &expr)), indent);
     });
 
     let val_handle = match (&body.expr, body.stmts.last()) {
         (Some(expr), _) => Some(String::from("_body_val")),
         (_, Some(stmt)) => {
-            let (_, stmt_val) = gen_stmt(prog, &stmt);
+            let (_, stmt_val) = gen_stmt(prog, &stmt, indent);
             stmt_val
         }
         (_, _) => None
@@ -79,13 +81,13 @@ fn gen_body(prog: &Prog, body: &Body) -> (String, Option<String>) {
     (output, val_handle)
 }
 
-fn gen_stmt(prog: &Prog, stmt: &Stmt) -> (String, Option<String>) {
+fn gen_stmt(prog: &Prog, stmt: &Stmt, indent: usize) -> (String, Option<String>) {
     match stmt {
         Stmt::Assign(tgt, expr) => {
             let (tgt_str, tgt_var) = gen_target(prog, tgt);
             (format!("{} = {};\n", tgt_str, gen_expr(prog, expr)), Some(tgt_var))
         }
-        Stmt::Case(case) => gen_case(prog, &case),
+        Stmt::Case(case) => gen_case(prog, &case, indent),
         Stmt::FnCall(fn_id, args) => {
             let mut output = format!("var _fn_val = {}(", gen_sym(&prog.symbol_table, fn_id).to_owned());
 
@@ -101,39 +103,43 @@ fn gen_stmt(prog: &Prog, stmt: &Stmt) -> (String, Option<String>) {
     }
 }
 
-fn gen_case(prog: &Prog, case: &Case) -> (String, Option<String>) {
+fn gen_case(prog: &Prog, case: &Case, indent: usize) -> (String, Option<String>) {
+    // first indents are already added by stmt. This should be fixed later
     let mut output = format!("var _case_expr{} = {};\n", case.id, gen_expr(prog, &case.expr));
-    output = format!("{}var _case_val{};\n", output, case.id);
-    output = format!("{}switch(_case_expr{}[0]){{\n", output, case.id);
+    output = append_line(&output, format!("var _case_val{};\n", case.id), indent);
+    output = append_line(&output, format!("switch(_case_expr{}[0]){{\n", case.id), indent);
 
     for opt in &case.options {
-        output = format!("{}{}", output, gen_case_option(&prog, &opt, case.id));
+        output = format!("{}{}", output, gen_case_option(&prog, &opt, case.id, indent + 1));
     }
 
-    (format!("{}}}\n", output), Some(format!("_case_val{}", case.id)))
+    output = append_line(&output, String::from("}\n"), indent);
+    (output, Some(format!("_case_val{}", case.id)))
 }
 
-fn gen_case_option(prog: &Prog, option: &CaseOption, case_id: CaseID) -> String {
-    let mut output = format!("case {}:\n", gen_pattern(prog, &option.pattern));
+fn gen_case_option(prog: &Prog, option: &CaseOption, case_id: CaseID, indent: usize) -> String {
+    let mut output = append_line(&String::from(""), format!("case {}:\n", gen_pattern(prog, &option.pattern)), indent);
+
+    let body_indent = indent + 1;
 
     for (i, arg) in option.pattern.args.iter().enumerate() {
-        output = format!("{}var {} = _case_expr{}[{}];\n", output, gen_sym(&prog.symbol_table, arg), case_id, i + 1);
+        output = append_line(&output, format!("var {} = _case_expr{}[{}];\n", gen_sym(&prog.symbol_table, arg), case_id, i + 1), body_indent);
     }
 
     match &option.body {
         CaseBody::Body(body) => {
-            let (body, val_handle) = gen_body(prog, body);
+            let (body, val_handle) = gen_body(prog, body, body_indent);
             output = format!("{}{}", output, body);
             val_handle.map(|handle| {
-                output = format!("{}_case_val{} = {};\n", output, case_id, handle);
+                output = append_line(&output, format!("_case_val{} = {};\n", case_id, handle), body_indent);
             });
         }
         CaseBody::Expr(expr) => {
-            output = format!("{}_case_val{} = {};\n", output, case_id, gen_expr(prog, expr));
+            output = append_line(&output, format!("_case_val{} = {};\n", case_id, gen_expr(prog, expr)), body_indent);
         }
     }
 
-    format!("{}break;\n", output)
+    append_line(&output, String::from("break;\n"), body_indent)
 }
 
 fn gen_pattern(prog: &Prog, pattern: &CasePattern) -> String {
@@ -202,4 +208,8 @@ fn gen_sym(table: &SymbolTable, id: &SymbolID) -> String {
 fn gen_adtval(types: &TypeTableExt, id: &ADTValID) -> String {
     let val = types.values.get(id).expect("Symbol not found");
     String::from(format!("{}.{}", val.data_type, val.name.to_ascii_uppercase()))
+}
+
+fn append_line(output: &String, line: String, indent: usize) -> String {
+    format!("{}{}{}", output, "\t".repeat(indent), line)
 }
