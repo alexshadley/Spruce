@@ -24,8 +24,8 @@ Some of the things I want to see in Spruce:
   awesome, and I think every language should feature them
 * Pattern Matching: sort of a sibling feature to ADTs, these allow programmers
   to destrucure ADTs and use the contents
-* List Comprehensions: I love how quickly I can transform thought to logic
-  with Python's list comprehensions.
+* List Comprehensions: List comprehensions are great tools for readably
+  building lists
 * JS as a Compile Target: a number of languages, for instance Elm and
   ReasonML, use JS as their primary compile target, which these days is 
   actually very pragmatic. JS runs everywhere: browsers, servers, desktop
