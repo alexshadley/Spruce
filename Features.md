@@ -5,11 +5,11 @@ exists to coordinate the work of building new features.
 
 ## Primitives
 
-|Type|Status|
-|----|------|
+| Type | Status |
+|------|--------|
 | Bool | |
-| Int | |
-| Float| :heavy_check_mark: |
+| Int | :heavy_check_mark: |
+| Float| |
 | Char | |
 | String | |
 | Tuple | |
@@ -45,19 +45,18 @@ versions of a list to be used in things like for loops. One of the main design
 goals of Spruce is to make list processing easy and expressive with a mix of
 functional and imperative concepts.
 
-## Type Checking
+## Type System
 
 | Feature | Status |
 |---------|--------|
 | Type Annotations | |
-| Type Inference | |
+| Type Inference | :heavy_check_mark: |
 | Typeclasses | |
 
-The type checker is maybe the most important feature Spruce currently lacks.
-The eventual goal is to adapt the Hindley-Milner type inference algorithm to
-Spruce, which would allow programmers to optionally specify function and
-variable types, as well as enabling generics. This may come later though, once
-more of the language's semantics are understood.
+Spruce currently features a type inference algorithm based on hindley-milner,
+but adapted for imperative languages. It should be able to deduce any type,
+and produce general types for functions! That being said, it's not thoroughly
+tested yet, and may break in some edge cases.
 
 ## ADTs
 
