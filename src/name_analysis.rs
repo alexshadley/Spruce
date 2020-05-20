@@ -83,6 +83,15 @@ pub enum Target {
     Update(SymbolID)
 }
 
+impl Target {
+    pub fn id(&self) -> SymbolID {
+        match self {
+            Target::Var(id) | Target::Mutable(id) |
+            Target::Update(id) => id.clone()
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Type {
     pub name: String,
@@ -564,7 +573,8 @@ struct TypeTable {
 #[derive(Debug, PartialEq)]
 pub struct TypeTableExt {
     pub types: HashMap<String, ADT>,
-    pub values: HashMap<SymbolID, ADTValue>
+    pub values: HashMap<SymbolID, ADTValue>,
+    pub primitives: HashSet<String>
 }
 
 
@@ -611,7 +621,8 @@ impl TypeTable {
     fn to_ext(self) -> TypeTableExt {
         TypeTableExt {
             types: self.types,
-            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect()
+            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
+            primitives: self.primitives
         }
     }
 }

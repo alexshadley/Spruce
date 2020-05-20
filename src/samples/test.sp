@@ -5,11 +5,6 @@ addGlob(n) {
     myGlob
 }
 
-type Bool {
-    True
-    False
-}
-
 not(b) {
     case b {
         True -> False
