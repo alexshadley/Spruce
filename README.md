@@ -18,7 +18,7 @@ Some of the things I want to see in Spruce:
 * Type Inference: Advanced type inference (think Haskell here) lets us have
   the awesome guarantees of a static type system without bogging ourselves
   down in type annotations everywhere.
-* Albebraic Data Types (ADTs): ADTs have been kicking around in languages like
+* Algebraic Data Types (ADTs): ADTs have been kicking around in languages like
   Haskell for decades, but only recently have they found their way into the
   mainstream, with appearances in the likes of Rust and Typescript. They're
   awesome, and I think every language should feature them
