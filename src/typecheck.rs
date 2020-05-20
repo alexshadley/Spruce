@@ -297,27 +297,27 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
 
         na::Expr::FnCall(id, args) => {
             // TODO: finish
-            /*let mut subs = HashMap::new();
+            let mut subs = HashMap::new();
+            let mut arg_types = Vec::new();
             for arg in args {
                 let arg_tvar = env.new_tvar();
                 let arg_subs = typecheck(env, arg, &arg_tvar)?;
+                arg_types.push(Box::from(apply(&arg_subs, arg_tvar)));
                 subs.extend(arg_subs);
-            }*/
-
-            let fn_type = (env.sym_type.get(id)?).clone();
-            match fn_type {
-                Type::Func(arg_types, out_type) => {
-                    let mut subs = unify(ty, &out_type)?;
-
-                    for (arg, arg_type) in args.iter().zip(arg_types) {
-                        let arg_subs = typecheck(env, arg, &apply(&subs, *arg_type))?;
-                        subs.extend(arg_subs);
-                    }
-
-                    Some(subs)
-                }
-                _ => None
             }
+
+            let out_tvar = env.new_tvar();
+            let out_subs = unify(&ty, &out_tvar)?;
+            let out_type = apply(&out_subs, out_tvar);
+            subs.extend(out_subs);
+
+            let fn_type = Type::Func(arg_types, Box::from(out_type));
+
+            let fn_sym_type = env.sym_type.get(id).expect("dangling function id");
+            let fn_subs = unify(fn_sym_type, &fn_type)?;
+            subs.extend(fn_subs);
+
+            Some(subs)
         }
 
         na::Expr::ADTVal(_, _) => {
