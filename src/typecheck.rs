@@ -11,18 +11,19 @@ enum Type {
     Unit,
     Prim(String),
     TVar(TVarID),
-    ADT(String),
+    // the ADT, followed by type params
+    ADT(na::ADTID, Vec<Box<Type>>),
     Func(Vec<Box<Type>>, Box<Type>)
 }
 
 impl Type {
-    fn as_str(&self) -> String {
+    fn as_str(&self, prog: &na::Prog) -> String {
         let mut tvar_names: HashMap<TVarID, String> = HashMap::new();
         let mut next_name = 0u8;
-        self.as_str_inner(&mut tvar_names, &mut next_name)
+        self.as_str_inner(prog, &mut tvar_names, &mut next_name)
     }
 
-    fn as_str_inner(&self, tvar_names: &mut HashMap<TVarID, String>, next_name: &mut u8) -> String {
+    fn as_str_inner(&self, prog: &na::Prog, tvar_names: &mut HashMap<TVarID, String>, next_name: &mut u8) -> String {
         match self {
             Type::TVar(id) => {
                 match tvar_names.get(id) {
@@ -37,17 +38,32 @@ impl Type {
             }
             Type::Unit => String::from("()"),
             Type::Prim(name) => name.clone(),
-            Type::ADT(name) => name.clone(),
+            Type::ADT(id, args) => {
+                let name = prog.type_table.types.get(id).expect("dangling type id").name;
+                if args.len() == 0 {
+                    name.clone()
+                }
+                else {
+                    let mut output = format!("{}(", name);
+                    args.first().as_ref().map(|arg| {
+                        output = format!("{}{}", output, arg.as_str_inner(prog, tvar_names, next_name));
+                    });
+                    for arg in args.iter().skip(1) {
+                        output = format!("{}, {}", output, arg.as_str_inner(prog, tvar_names, next_name));
+                    };
+                    output
+                }
+            }
             Type::Func(args, out) => {
                 let mut output = String::from("(");
                 args.first().as_ref().map(|arg| {
-                    output = format!("{}{}", output, arg.as_str_inner(tvar_names, next_name));
+                    output = format!("{}{}", output, arg.as_str_inner(prog, tvar_names, next_name));
                 });
                 for arg in args.iter().skip(1) {
-                    output = format!("{}, {}", output, arg.as_str_inner(tvar_names, next_name));
+                    output = format!("{}, {}", output, arg.as_str_inner(prog, tvar_names, next_name));
                 };
 
-                format!("{}) -> {}", output, out.as_str_inner(tvar_names, next_name))
+                format!("{}) -> {}", output, out.as_str_inner(prog, tvar_names, next_name))
             }
         }
     }
@@ -81,7 +97,7 @@ impl Environment {
         let mut output = String::from("");
         for (id, ty) in &self.sym_type {
             let name = prog.symbol_table.store.get(id).expect("dangling symbol id").name.clone();
-            output = format!("{}{} : {}\n", output, name, ty.as_str());
+            output = format!("{}{} : {}\n", output, name, ty.as_str(prog));
         }
 
         output
@@ -90,12 +106,17 @@ impl Environment {
 
 type TSubst = HashMap<TVarID, Type>;
 
-fn str_to_type(prog: &na::Prog, s: &String) -> Type {
+fn id_to_type(prog: &na::Prog, id: &na::TypeID) -> Type {
+    match id {
+        na::TypeID::ADT(adt_id) => {
+            let adt = prog.type_table.types.get(adt_id).expect("dangling type id");
+            Type::ADT(adt_id, adt.)
+        }
+    }
     if prog.type_table.primitives.contains(s) {
         Type::Prim(s.clone())
     }
     else {
-        Type::ADT(s.clone())
     }
 }
 

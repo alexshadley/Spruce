@@ -541,23 +541,32 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::Expr) -> Re
 }
 
 pub type ADTValID = u32;
+pub type ADTID = u32;
+
+#[derive(Debug, PartialEq)]
+pub enum TypeID {
+    ADT(ADTID),
+    Prim(String)
+}
 
 #[derive(Debug, PartialEq)]
 pub struct ADTValue {
     pub id: ADTValID,
     pub name: String,
-    pub args: Vec<String>,
-    pub data_type: String
+    pub args: Vec<TypeID>,
+    pub data_type: TypeID
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ADT {
-    name: String
+    pub id: ADTID,
+    pub name: String
 }
 
 #[derive(Debug, PartialEq)]
 struct TypeTable {
-    next_id: ADTValID,
+    next_type_id: ADTID,
+    next_val_id: ADTValID,
     primitives: HashSet<String>,
     types: HashMap<String, ADT>,
     values: HashMap<String, ADTValue>
@@ -567,30 +576,31 @@ struct TypeTable {
 /// SymbolID. The approach to type symbols needs to be better thought out
 #[derive(Debug, PartialEq)]
 pub struct TypeTableExt {
-    pub types: HashMap<String, ADT>,
-    pub values: HashMap<SymbolID, ADTValue>,
+    pub types: HashMap<ADTID, ADT>,
+    pub values: HashMap<ADTValID, ADTValue>,
     pub primitives: HashSet<String>
 }
-
 
 impl TypeTable {
     fn new() -> Self {
         // TODO: figure out the proper way to do this in rust
         let primitives = vec![String::from("Int"), String::from("Float")];
 
-        TypeTable {next_id: 0, primitives: HashSet::from_iter(primitives), types: HashMap::default(), values: HashMap::default()}
+        TypeTable {next_type_id: 0, next_val_id: 0, primitives: HashSet::from_iter(primitives), types: HashMap::default(), values: HashMap::default()}
     }
 
-    fn add_type(&mut self, dt: ADT) {
-        self.types.insert(dt.name.clone(), dt);
+    fn add_type(&mut self, name: &String) {
+        let new_adt = ADT {name: name.clone(), id: self.next_type_id};
+        self.next_type_id += 1;
+        self.types.insert(name.clone(), new_adt);
     }
 
-    fn add_value(&mut self, name: &String, args: &Vec<String>, data_type: &String) {
+    fn add_value(&mut self, name: &String, args: &Vec<TypeID>, data_type: &String) {
         let mut r = self.types.get_mut(data_type);
         match r {
             Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: args.clone(), data_type: adt.name.clone(), id: self.next_id};
-                self.next_id += 1;
+                let new_val = ADTValue {name: name.clone(), args: *args.clone(), data_type: TypeID::ADT(adt.id), id: self.next_val_id};
+                self.next_val_id += 1;
                 self.values.insert(new_val.name.clone(), new_val);
             }
             None => unreachable!()
@@ -615,7 +625,7 @@ impl TypeTable {
 
     fn to_ext(self) -> TypeTableExt {
         TypeTableExt {
-            types: self.types,
+            types: self.types.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
             values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
             primitives: self.primitives
         }
@@ -636,8 +646,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<Type>, TypeTable), String>
             return Err(String::from(format!("{} is an invalid type name: types must be uppercase", t.name)))
         }
 
-        let new_type = ADT {name: t.name.clone() };
-        type_table.add_type(new_type)
+        type_table.add_type(&t.name)
     }
 
     for t in &prog.types {
@@ -645,13 +654,24 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<Type>, TypeTable), String>
             if type_table.has_value(&v.name) {
                 return Err(String::from(format!("value declared twice: {}", v.name)))
             }
+
+            let mut arg_ids = Vec::new();
             for arg in &v.args {
-                if !type_table.has_type(&arg) {
-                    return Err(String::from(format!("type does not exist: {}", arg)));
-                }
+                match (type_table.types.get(arg), type_table.primitives.get(arg)) {
+                    (Some(adt), _) => {
+                        arg_ids.push(TypeID::ADT(adt.id));
+                    }
+                    (_, Some(s)) => {
+                        arg_ids.push(TypeID::Prim(s.clone()));
+                    }
+                    _ => {
+                        return Err(String::from(format!("type does not exist: {}", arg)));
+                    }
+                };
+
             }
 
-            type_table.add_value(&v.name, &v.args, &t.name);
+            type_table.add_value(&v.name, &arg_ids, &t.name);
         }
     }
 
