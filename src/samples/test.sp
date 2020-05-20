@@ -1,10 +1,3 @@
-mut myGlob = 0
-
-addGlob(n) {
-    myGlob := myGlob + n
-    myGlob
-}
-
 not(b) {
     case b {
         True -> False
@@ -25,7 +18,7 @@ and(x, y) {
 }
 
 type Maybe {
-    Just(Float)
+    Just(Int)
     Nothing
 }
 
@@ -41,7 +34,7 @@ inc(x) {
 }
 
 type List {
-    Cons(Float, List)
+    Cons(Int, List)
     Nil
 }
 
@@ -70,9 +63,11 @@ fib(n) {
     }
 }
 
-main() {
-    addGlob(10)
+foo(x, y, z) {
+    x(y, z)
+}
 
+main() {
     myBool = and(True, False)
 
     mut myVal = Just(5.0)

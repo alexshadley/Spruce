@@ -13,7 +13,7 @@ mod codegen;
 
 fn main() {
     let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let unparsed_file = fs::read_to_string("src/samples/typecheck.sp").expect("cannot read file");
+    let unparsed_file = fs::read_to_string("src/samples/test.sp").expect("cannot read file");
 
     let preprocessed = format!("{}{}", prelude, unparsed_file);
     let prog = parser::parse(&preprocessed).expect("Parse failed");
@@ -23,7 +23,7 @@ fn main() {
     println!("{:#?}", analyzed_prog);
 
     let env = typecheck::check_prog(&analyzed_prog).expect("Typecheck failed");
-    println!("{:?}", env);
+    println!("{}", env.as_str(&analyzed_prog));
 
     let mut out_file = fs::File::create("out.js").expect("failed to create file");
     codegen::gen_prog(&mut out_file, &analyzed_prog);

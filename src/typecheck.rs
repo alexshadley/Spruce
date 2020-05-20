@@ -15,6 +15,44 @@ enum Type {
     Func(Vec<Box<Type>>, Box<Type>)
 }
 
+impl Type {
+    fn as_str(&self) -> String {
+        let mut tvar_names: HashMap<TVarID, String> = HashMap::new();
+        let mut next_name = 0u8;
+        self.as_str_inner(&mut tvar_names, &mut next_name)
+    }
+
+    fn as_str_inner(&self, tvar_names: &mut HashMap<TVarID, String>, next_name: &mut u8) -> String {
+        match self {
+            Type::TVar(id) => {
+                match tvar_names.get(id) {
+                    Some(repr) => repr.clone(),
+                    None => {
+                        let tvar_repr = ((*next_name + 97) as char).to_string();
+                        *next_name += 1;
+                        tvar_names.insert(*id, tvar_repr.clone());
+                        tvar_repr
+                    }
+                }
+            }
+            Type::Unit => String::from("()"),
+            Type::Prim(name) => name.clone(),
+            Type::ADT(name) => name.clone(),
+            Type::Func(args, out) => {
+                let mut output = String::from("(");
+                args.first().as_ref().map(|arg| {
+                    output = format!("{}{}", output, arg.as_str_inner(tvar_names, next_name));
+                });
+                for arg in args.iter().skip(1) {
+                    output = format!("{}, {}", output, arg.as_str_inner(tvar_names, next_name));
+                };
+
+                format!("{}) -> {}", output, out.as_str_inner(tvar_names, next_name))
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Environment {
     next_type_var: TVarID,
@@ -37,6 +75,16 @@ impl Environment {
         self.sym_type = self.sym_type.iter().map(|(k, ty)| {
             (*k, apply(subs, (*ty).clone()))
         }).collect();
+    }
+
+    pub fn as_str(&self, prog: &na::Prog) -> String {
+        let mut output = String::from("");
+        for (id, ty) in &self.sym_type {
+            let name = prog.symbol_table.store.get(id).expect("dangling symbol id").name.clone();
+            output = format!("{}{} : {}\n", output, name, ty.as_str());
+        }
+
+        output
     }
 }
 

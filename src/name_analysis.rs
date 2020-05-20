@@ -165,7 +165,7 @@ pub struct SymbolTable {
     next_id: SymbolID,
     next_case_id: CaseID,
     layers: Vec<SymbolLayer>,
-    store: HashMap<SymbolID, Symbol>
+    pub store: HashMap<SymbolID, Symbol>
 }
 
 impl SymbolTable {
@@ -353,18 +353,13 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::Stmt) -
         parser::Stmt::FnCall(name, args) => {
             match table.lookup(&name) {
                 Some(sym) => {
-                    if sym.sym_type != SymbolType::Function {
-                        Err(String::from(format!("'{}' is not a function", name)))
+                    let mut checked_args = Vec::new();
+                    for arg in args {
+                        let checked = check_expr(table, types, &arg)?;
+                        checked_args.push(checked);
                     }
-                    else {
-                        let mut checked_args = Vec::new();
-                        for arg in args {
-                            let checked = check_expr(table, types, &arg)?;
-                            checked_args.push(checked);
-                        }
 
-                        Ok(Stmt::FnCall(sym.id, checked_args))
-                    }
+                    Ok(Stmt::FnCall(sym.id, checked_args))
                 }
                 None => Err(String::from(format!("'{}' used but not declared", name)))
             }
