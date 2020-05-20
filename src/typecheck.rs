@@ -96,9 +96,28 @@ fn check_func(env: &mut Environment, func: &na::Func) -> Result<bool, String> {
     }
     let ret_tvar = env.new_tvar();
     let fn_type = Type::Func(arg_types, Box::from(ret_tvar.clone()));
-    env.sym_type.insert(func.name, fn_type);
+    let body_subs = check_body(env, &func.body, &ret_tvar)?;
 
-    let ret_type = check_body(env, &func.body, &ret_tvar);
+    let refined_fn_type = apply(&body_subs, fn_type);
+    env.apply_subs(&body_subs);
+
+    // it's possible that the function id is already assigned a type from an
+    // earlier typecheck if it appeared in a function call
+    match env.sym_type.get(&func.name) {
+        Some(env_fn_type) => {
+            match unify(env_fn_type, &refined_fn_type) {
+                Some(subs) => {
+                    env.apply_subs(&subs);
+                }
+                None => {
+                    return Err(String::from("Function definiton incompatible with earlier function call"));
+                }
+            };
+        }
+        None => {
+            env.sym_type.insert(func.name, refined_fn_type);
+        }
+    };
 
     Ok(true)
 }
@@ -223,19 +242,36 @@ fn check_body(env: &mut Environment, body: &na::Body, ty: &Type) -> Result<TSubs
                 stmt_types.push(var_type);
                 subs.extend(case_subs);
             }
-            _ => unimplemented!()
+            // it's annoying that fn call doesn't carry a single expr; we
+            // might want to make this change soon
+            na::Stmt::FnCall(id, args) => {
+                let cloned_args = args.iter().map(|arg| { Box::from(arg.clone()) }).collect();
+                let fn_expr = na::Expr::FnCall(id.clone(), cloned_args);
+
+                let new_tvar = env.new_tvar();
+                let fn_subs = typecheck(env, &fn_expr, &new_tvar).expect("typecheck function failed");
+                let fn_type = apply(&fn_subs, new_tvar);
+
+                env.apply_subs(&fn_subs);
+
+                stmt_types.push(fn_type);
+                subs.extend(fn_subs);
+            }
         }
     }
 
     match &body.expr {
         Some(expr) => {
-            let subs = typecheck(env, &expr, ty).expect("typecheck return expr failed");
-            env.apply_subs(&subs);
+            let expr_subs = typecheck(env, &expr, ty).expect("typecheck return expr failed");
+            env.apply_subs(&expr_subs);
+            subs.extend(expr_subs);
         }
         None => {
             let last_stmt_type = stmt_types.last().expect("unreachable");
             let stmt_subs = unify(last_stmt_type, ty).expect("unreachable");
+
             env.apply_subs(&stmt_subs);
+            subs.extend(stmt_subs);
         }
     };
 
@@ -291,12 +327,18 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
                 Some(sym_type) => {
                     unify(ty, sym_type)
                 }
-                None => None
+                // if we encounter an id without an id, make a tvar and keep
+                // going. we'll verify the type later when we check whatever
+                // the id refers to
+                None => {
+                    let id_tvar = env.new_tvar();
+                    env.sym_type.insert(*id, id_tvar.clone());
+                    unify(ty, &id_tvar)
+                }
             }
         }
 
         na::Expr::FnCall(id, args) => {
-            // TODO: finish
             let mut subs = HashMap::new();
             let mut arg_types = Vec::new();
             for arg in args {
@@ -313,15 +355,36 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
 
             let fn_type = Type::Func(arg_types, Box::from(out_type));
 
-            let fn_sym_type = env.sym_type.get(id).expect("dangling function id");
-            let fn_subs = unify(fn_sym_type, &fn_type)?;
+            let fn_sym_type = match env.sym_type.get(id) {
+                Some(sym) => sym.clone(),
+                None => {
+                    let fn_tvar = env.new_tvar();
+                    env.sym_type.insert(*id, fn_tvar.clone());
+                    fn_tvar
+                }
+            };
+            let fn_subs = unify(&fn_sym_type, &fn_type)?;
             subs.extend(fn_subs);
 
             Some(subs)
         }
 
-        na::Expr::ADTVal(_, _) => {
-            unify(ty, &Type::ADT(String::from("Bool")))
+        na::Expr::ADTVal(id, args) => {
+            let (val_arg_types, val_out_type) = match env.val_type.get(id).expect("dangling type id") {
+                Type::Func(args, out) => (args.clone(), out.clone()),
+                _ => panic!("ADT Value with non-function type")
+            };
+
+            let mut subs = HashMap::new();
+            for (arg, arg_type) in args.iter().zip(val_arg_types) {
+                let arg_subs = typecheck(env, arg, &arg_type)?;
+                subs.extend(arg_subs);
+            }
+
+            let out_subs = unify(&ty, &val_out_type)?;
+            subs.extend(out_subs);
+
+            Some(subs)
         }
     }
 }

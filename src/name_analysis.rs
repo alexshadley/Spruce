@@ -12,7 +12,7 @@ use std::iter::FromIterator;
 
 use crate::parser;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Add(Box<Expr>, Box<Expr>),
     Mult(Box<Expr>, Box<Expr>),

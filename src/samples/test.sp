@@ -78,7 +78,7 @@ main() {
     mut myVal = Just(5.0)
     myVal := map(myVal, inc)
 
-    mut myList = Cons(1.0, Cons(2.0, Cons(3.0, Nil)))
+    mut myList = Cons(1.0, Cons(2.0, Cons(10.0, Nil)))
     myList := listMap(myList, fib)
     listReduce(add, 0, myList)
 }
