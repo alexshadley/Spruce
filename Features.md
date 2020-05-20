@@ -51,6 +51,7 @@ functional and imperative concepts.
 |---------|--------|
 | Type Annotations | |
 | Type Inference | :heavy_check_mark: |
+| Type Aliases | |
 | Typeclasses | |
 
 Spruce currently features a type inference algorithm based on hindley-milner,
@@ -78,6 +79,7 @@ restriction, but in the future this will be an issue.
 | Numeric patterns | |
 | String patterns | |
 | Tuples | |
+| Incomplete Pattern Detection | |
 
 Pattern matching currently works to allow destructuring of ADT values, but
 cannot do anything useful with numeric types, or strings or tuples when those
