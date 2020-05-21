@@ -274,15 +274,28 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
     for stmt in &body.val.stmts {
         match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
-                let new_tvar = env.new_tvar();
-                let stmt_subs = typecheck(env, expr, &new_tvar).expect("typecheck stmt failed");
-                let var_type = apply(&stmt_subs, new_tvar);
-                
-                env.sym_type.insert(tgt.val.id(), var_type.clone());
-                env.apply_subs(&stmt_subs);
+                match &tgt.val {
+                    na::Target::Update(id) => {
+                        let sym_type = env.sym_type.get(id).expect("Dangling symbol id").clone();
+                        let stmt_subs = typecheck(env, expr, &sym_type)?;
+                        env.apply_subs(&stmt_subs);
 
-                stmt_types.push(var_type);
-                subs.extend(stmt_subs);
+                        let var_type = apply(&stmt_subs, sym_type);
+                        stmt_types.push(var_type);
+                        subs.extend(stmt_subs);
+                    }
+                    _ => {
+                        let new_tvar = env.new_tvar();
+                        let stmt_subs = typecheck(env, expr, &new_tvar)?;
+                        let var_type = apply(&stmt_subs, new_tvar);
+                        
+                        env.sym_type.insert(tgt.val.id(), var_type.clone());
+                        env.apply_subs(&stmt_subs);
+
+                        stmt_types.push(var_type);
+                        subs.extend(stmt_subs);
+                    }
+                }
             }
             na::Stmt::Case(case) => {
                 let new_tvar = env.new_tvar();

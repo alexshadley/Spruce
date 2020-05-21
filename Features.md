@@ -13,6 +13,7 @@ exists to coordinate the work of building new features.
 | Char | |
 | String | |
 | Tuple | |
+| Record / Struct | |
 
 In general the Spruce approach to primitives has not revieved a lot of
 thought. My general instinct is to implement as many types as possible in
@@ -44,6 +45,15 @@ lists with JavaScript lists. Ideally interfaces will make it possible for both
 versions of a list to be used in things like for loops. One of the main design
 goals of Spruce is to make list processing easy and expressive with a mix of
 functional and imperative concepts.
+
+## Functions
+
+| Feature | Status |
+|---------|--------|
+| Basic Functions | :heavy_check_mark: |
+| Anonymous (lambda) functions | |
+| Closures | |
+| Optional Arguments | |
 
 ## Type System
 

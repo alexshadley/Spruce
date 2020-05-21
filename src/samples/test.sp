@@ -63,12 +63,9 @@ and3(x, y, z) {
     }
 }
 
-foo(x, y) {
-    b = x == y
-    case b {
-        True -> x
-        False -> y
-    }
+foo(x, y, z) {
+    mut m = x(y)
+    m := y(z)
 }
 
 fib(n) {

@@ -14,7 +14,7 @@ mod codegen;
 
 fn main() {
     let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let unparsed_file = fs::read_to_string("src/samples/test.sp").expect("cannot read file");
+    let unparsed_file = fs::read_to_string("src/samples/typecheck.sp").expect("cannot read file");
 
     let preprocessed = format!("{}{}", prelude, unparsed_file);
     let prog = parser::parse(&preprocessed).expect("Parse failed");
