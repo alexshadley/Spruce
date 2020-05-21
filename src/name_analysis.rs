@@ -10,8 +10,25 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
+use crate::error::{NameErr};
+
 use crate::parser;
 use crate::parser::{Span};
+
+
+fn double_decl(name: &String, span: Span) -> NameErr {
+    NameErr{
+        message: String::from(format!("'{}' declared twice", name)),
+        span: span
+    }
+}
+
+fn undeclared(name: &String, span: Span) -> NameErr {
+    NameErr{
+        message: String::from(format!("'{}' used but not declared", name)),
+        span: span
+    }
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
@@ -193,7 +210,7 @@ pub struct Prog {
 }
 
 
-pub fn name_analysis(prog: parser::Prog) -> Result<Prog, String> {
+pub fn name_analysis(prog: parser::Prog) -> Result<Prog, NameErr> {
     let (types, type_table) = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
@@ -310,14 +327,14 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), String> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), NameErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
     let mut fn_ids = Vec::new();
     for func in &prog.functions {
         if table.conflicts(&func.val.name) {
-            return Err(String::from(format!("'{}' declared twice", func.val.name)));
+            return Err(double_decl(&func.val.name, func.span.clone()));
         }
         let id = table.attempt_insert(&func.val.name, SymbolType::Function).expect("unreachable");
         fn_ids.push(id);
@@ -330,20 +347,23 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
                 match &tgt.val {
                     parser::Target::Var(name) => {
                         if table.conflicts(name) {
-                            return Err(String::from(format!("'{}' declared twice", name)));
+                            return Err(double_decl(name, tgt.span.clone()));
                         }
-                        let id = table.attempt_insert(&name, SymbolType::Const).expect("unreachable");
+                        let id = table.attempt_insert(name, SymbolType::Const).expect("unreachable");
                         Target::Var(id)
                     }
                     parser::Target::Mutable(name) => {
                         if table.conflicts(name) {
-                            return Err(String::from(format!("'{}' declared twice", name)));
+                            return Err(double_decl(name, tgt.span.clone()));
                         }
-                        let id = table.attempt_insert(&name, SymbolType::Mutable).expect("unreachable");
+                        let id = table.attempt_insert(name, SymbolType::Mutable).expect("unreachable");
                         Target::Mutable(id)
                     }
                     parser::Target::Update(_) => {
-                        return Err(String::from(format!("Updates not allowed in program level-statements")));
+                        return Err(NameErr {
+                            message: String::from(format!("Updates not allowed in program level-statements")),
+                            span: var.span.clone()
+                        });
                     }
                 }
             }
@@ -359,7 +379,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
     Ok((table, fn_ids, tgts))
 }
 
-fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, String> {
+fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, NameErr> {
     match &stmt.val {
         parser::Stmt::Assign(_, expr) => {
             let new_expr = check_expr(table, types, expr)?;
@@ -373,7 +393,7 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
     }
 }
 
-fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, String> {
+fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, NameErr> {
     table.push_layer();
 
     let mut arg_symbols = Vec::new();
@@ -384,7 +404,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
             }
             None => {
                 // TODO: implement variable shadowing with arguments
-                return Err(String::from(format!("'{}' declared twice (as arg)", arg)));
+                return Err(double_decl(arg, func.span.clone()));
             }
         }
     }
@@ -399,7 +419,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
     })
 }
 
-fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNode) -> Result<BodyNode, String> {
+fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNode) -> Result<BodyNode, NameErr> {
     let mut stmts = Vec::new();
     for stmt in &body.val.stmts {
         stmts.push(check_stmt(table, types, stmt)?);
@@ -416,7 +436,7 @@ fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNod
     })
 }
 
-fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode) -> Result<StmtNode, String> {
+fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode) -> Result<StmtNode, NameErr> {
     let stmt_val = match &stmt.val {
         parser::Stmt::Assign(tgt, expr) => {
             let new_tgt = check_target(table, tgt)?;
@@ -451,7 +471,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
                     Stmt::FnCall(sym.id, checked_args)
                 }
                 None => {
-                    return Err(String::from(format!("'{}' used but not declared", name)));
+                    return Err(undeclared(name, stmt.span.clone()));
                 }
             }
         }
@@ -463,7 +483,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
     })
 }
 
-fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOptionNode) -> Result<CaseOptionNode, String> {
+fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOptionNode) -> Result<CaseOptionNode, NameErr> {
     table.push_layer();
     let pattern = check_case_pattern(table, types, &opt.val.pattern)?;
     let body_val = match &opt.val.body.val {
@@ -482,13 +502,16 @@ fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::C
     })
 }
 
-fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePatternNode) -> Result<CasePatternNode, String> {
+fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePatternNode) -> Result<CasePatternNode, NameErr> {
     let id = match types.get_value(&pattern.val.base) {
         Some(val) => {
             val.id
         }
         None => {
-            return Err(String::from(format!("'{}' is not an ADT value", pattern.val.base)))
+            return Err(NameErr {
+                message: String::from(format!("'{}' is not an ADT value", pattern.val.base)),
+                span: pattern.span.clone()
+            });
         }
     };
 
@@ -500,7 +523,7 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
             }
             None => {
                 // TODO: implement variable shadowing with arguments
-                return Err(String::from(format!("'{}' declared twice (as arg)", arg)));
+                return Err(double_decl(arg, pattern.span.clone()));
             }
         }
     }
@@ -512,14 +535,14 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
     })
 }
 
-fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<TargetNode, String> {
+fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<TargetNode, NameErr> {
     let tgt_val = match &tgt.val {
         parser::Target::Var(name) => {
             let id_result = table.attempt_insert(name, SymbolType::Const);
             match id_result {
                 Some(id) => Ok(Target::Var(id)),
                 None => {
-                    Err(String::from(format!("'{}' declared twice", name)))
+                    Err(double_decl(name, tgt.span.clone()))
                 }
             }
         }
@@ -527,7 +550,8 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
             let id_result = table.attempt_insert(&name, SymbolType::Mutable);
             match id_result {
                 Some(id) => Ok(Target::Mutable(id)),
-                None => Err(String::from(format!("'{}' declared twice", name)))
+                None => Err(double_decl(name, tgt.span.clone()))
+
             }
         }
         parser::Target::Update(name) => {
@@ -536,10 +560,16 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
                 Some(sym) => {
                     match sym.sym_type {
                         SymbolType::Mutable => Ok(Target::Update(sym.id)),
-                        _ => Err(String::from(format!("attempt to update non-mutable '{}'", name)))
+                        _ => Err(NameErr {
+                            message: String::from(format!("attempt to update non-mutable '{}'", name)),
+                            span: tgt.span.clone()
+                        })
                     }
                 }
-                None => Err(String::from(format!("'{}' not declared before attempting update", name)))
+                None => Err(NameErr {
+                    message: String::from(format!("'{}' not declared before attempting update", name)),
+                    span: tgt.span.clone()
+                })
             }
         }
     }?;
@@ -550,13 +580,13 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
     })
 }
 
-fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -> Result<ExprNode, String> {
+fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -> Result<ExprNode, NameErr> {
     let expr_val = match &expr.val {
         parser::Expr::Id(name) => {
             match (table.lookup(&name), types.get_value(&name)) {
                 (Some(sym), _) => Ok(Expr::Id(sym.id)),
                 (_, Some(val)) => Ok(Expr::ADTVal(val.id, vec![])),
-                (None, None) => Err(String::from(format!("'{}' used but not declared", name)))
+                (None, None) => Err(undeclared(name, expr.span.clone()))
             }
         }
 
@@ -642,7 +672,7 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
                 }
 
                 (None, None) => {
-                    return Err(String::from(format!("'{}' used but not declared", fn_name)));
+                    return Err(undeclared(fn_name, expr.span.clone()));
                 }
             }
         }
@@ -740,16 +770,19 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), String>{
+fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), NameErr>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
         if type_table.has_type(&t.val.name) {
-            return Err(String::from(format!("{} declared twice", t.val.name)))
+            return Err(double_decl(&t.val.name, t.span.clone()))
         }
 
         if !t.val.name.chars().next().unwrap().is_uppercase() {
-            return Err(String::from(format!("{} is an invalid type name: types must be uppercase", t.val.name)))
+            return Err(NameErr {
+                message: String::from(format!("{} is an invalid type name: types must be uppercase", t.val.name)),
+                span: t.span.clone()
+            });
         }
 
         let new_type = ADT {name: t.val.name.clone() };
@@ -759,11 +792,14 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Str
     for t in &prog.types {
         for v in &t.val.options {
             if type_table.has_value(&v.val.name) {
-                return Err(String::from(format!("value declared twice: {}", v.val.name)))
+                return Err(double_decl(&v.val.name, v.span.clone()))
             }
             for arg in &v.val.args {
                 if !type_table.has_type(&arg) {
-                    return Err(String::from(format!("type does not exist: {}", arg)));
+                    return Err(NameErr {
+                        message: String::from(format!("type does not exist: {}", arg)),
+                        span: v.span.clone()
+                    })
                 }
             }
 

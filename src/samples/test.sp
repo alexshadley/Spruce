@@ -56,15 +56,26 @@ add(a, b) {
     a + b
 }
 
+and3(x, y, z) {
+    case x {
+        True -> and(x, y)
+        False -> False
+    }
+}
+
+foo(x, y) {
+    b = x == y
+    case b {
+        True -> x
+        False -> y
+    }
+}
+
 fib(n) {
     case n > 1 {
         True  -> fib(n-1) + fib(n-2)
         False -> n
     }
-}
-
-foo(x, y, z) {
-    x(y, z)
 }
 
 main() {

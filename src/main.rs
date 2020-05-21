@@ -7,6 +7,7 @@ extern crate lazy_static;
 use std::fs;
 
 mod parser;
+mod error;
 mod name_analysis;
 mod typecheck;
 mod codegen;
@@ -19,11 +20,24 @@ fn main() {
     let prog = parser::parse(&preprocessed).expect("Parse failed");
     println!("{:#?}", prog);
 
-    let analyzed_prog = name_analysis::name_analysis(prog).expect("Name analysis failed");
+    let analyzed_prog = match name_analysis::name_analysis(prog) {
+        Ok(p) => p,
+        Err(name_err) => {
+            print!("{}", name_err.as_str(&preprocessed));
+            return;
+        }
+    };
     println!("{:#?}", analyzed_prog);
 
-    let env = typecheck::check_prog(&analyzed_prog).expect("Typecheck failed");
-    println!("{}", env.as_str(&analyzed_prog));
+    let check_res = typecheck::check_prog(&analyzed_prog);
+    match check_res {
+        Ok(env) => {
+            println!("{}", env.as_str(&analyzed_prog));
+        }
+        Err(type_err) => {
+            print!("{}", type_err.as_str(&preprocessed));
+        }
+    }
 
     let mut out_file = fs::File::create("out.js").expect("failed to create file");
     codegen::gen_prog(&mut out_file, &analyzed_prog);

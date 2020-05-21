@@ -2,7 +2,9 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
+use crate::error::TypeErr;
 use crate::name_analysis as na;
+use crate::parser::Span;
 
 type TVarID = u32;
 
@@ -99,7 +101,7 @@ fn str_to_type(prog: &na::Prog, s: &String) -> Type {
     }
 }
 
-pub fn check_prog(prog: &na::Prog) -> Result<Environment, String> {
+pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
     let mut env = Environment::new();
 
     for (_, val) in &prog.type_table.values {
@@ -113,16 +115,9 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, String> {
         match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
                 let stmt_tvar = env.new_tvar();
-                let subs = typecheck(&mut env, &expr, &stmt_tvar);
-                match subs {
-                    Some(s) => {
-                        let stmt_type = apply(&s, stmt_tvar);
-                        env.sym_type.insert(tgt.val.id(), stmt_type);
-                    }
-                    None => {
-                        return Err(String::from(format!("Unification failed for expr: {:?}", expr)))
-                    }
-                }
+                let subs = typecheck(&mut env, &expr, &stmt_tvar)?;
+                let stmt_type = apply(&subs, stmt_tvar);
+                env.sym_type.insert(tgt.val.id(), stmt_type);
             }
             _ => unreachable!()
         }
@@ -135,7 +130,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, String> {
     Ok(env)
 }
 
-fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, String> {
+fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeErr> {
     let mut arg_types = Vec::new();
     for arg in &func.val.args {
         let arg_tvar = env.new_tvar();
@@ -153,12 +148,15 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, String
     // earlier typecheck if it appeared in a function call
     match env.sym_type.get(&func.val.name) {
         Some(env_fn_type) => {
-            match unify(env_fn_type, &refined_fn_type) {
-                Some(subs) => {
+            match unify(env_fn_type, &refined_fn_type, &func.span) {
+                Ok(subs) => {
                     env.apply_subs(&subs);
                 }
-                None => {
-                    return Err(String::from("Function definiton incompatible with earlier function call"));
+                Err(type_err) => {
+                    return Err(TypeErr {
+                        message: String::from("Function definiton incompatible with earlier function call"),
+                        span: type_err.span.clone()
+                    })
                 }
             };
         }
@@ -173,7 +171,7 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, String
 /// Returns tuple of type subs and a bool indicating if the case has a valid
 /// type. Unlinke other structures, it's ok for a case not to have a type in
 /// some circumstances.
-fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, String> {
+fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, TypeErr> {
     let mut subs = HashMap::new();
 
     let expr_tvar = env.new_tvar();
@@ -200,12 +198,15 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         }
         else {
             if pattern_type != *opt_pat_type {
-                return Err(format!("case statement has patterns of both types {} and {}", pattern_type, opt_pat_type));
+                return Err(TypeErr {
+                    message: format!("case statement has patterns of both types {} and {}", pattern_type, opt_pat_type),
+                    span: opt.val.pattern.span.clone()
+                })
             }
         }
     }
 
-    let pattern_subs = unify(&expr_type, &Type::ADT(pattern_type)).expect("unification between expr and pattern failed");
+    let pattern_subs = unify(&expr_type, &Type::ADT(pattern_type), &case.span)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -231,12 +232,12 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
                 env.apply_subs(&opt_subs);
                 subs.extend(opt_subs);
 
-                match unify(&apply(&subs, (*ty).clone()), &opt_type) {
-                    Some(uni_subs) => {
+                match unify(&apply(&subs, (*ty).clone()), &opt_type, &body.span) {
+                    Ok(uni_subs) => {
                         env.apply_subs(&uni_subs);
                         subs.extend(uni_subs);
                     }
-                    None => {
+                    Err(_) => {
                         is_unit = true;
                     }
                 }
@@ -244,7 +245,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
             na::CaseBody::Expr(expr) => {
                 has_expr = true;
 
-                let opt_subs = typecheck(env, &expr, &apply(&subs, (*ty).clone())).expect("case expr failed typecheck");
+                let opt_subs = typecheck(env, &expr, &apply(&subs, (*ty).clone()))?;
                 env.apply_subs(&opt_subs);
                 subs.extend(opt_subs);
             }
@@ -253,10 +254,13 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
 
     if is_unit {
         if has_expr {
-            return Err(String::from("Case with expr must have type"));
+            return Err(TypeErr {
+                message: String::from("Case with expr must have type"),
+                span: case.span.clone()
+            });
         }
         else {
-            let unit_subs = unify(ty, &Type::Unit).expect("unreachable");
+            let unit_subs = unify(ty, &Type::Unit, &case.span).expect("unreachable");
             subs.extend(unit_subs);
         }
     }
@@ -264,7 +268,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     Ok(subs)
 }
 
-fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<TSubst, String> {
+fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<TSubst, TypeErr> {
     let mut stmt_types = Vec::new();
     let mut subs = HashMap::new();
     for stmt in &body.val.stmts {
@@ -300,7 +304,7 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
                 };
 
                 let new_tvar = env.new_tvar();
-                let fn_subs = typecheck(env, &fn_expr, &new_tvar).expect("typecheck function failed");
+                let fn_subs = typecheck(env, &fn_expr, &new_tvar)?;
                 let fn_type = apply(&fn_subs, new_tvar);
 
                 env.apply_subs(&fn_subs);
@@ -313,13 +317,13 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
 
     match &body.val.expr {
         Some(expr) => {
-            let expr_subs = typecheck(env, &expr, ty).expect("typecheck return expr failed");
+            let expr_subs = typecheck(env, &expr, ty)?;
             env.apply_subs(&expr_subs);
             subs.extend(expr_subs);
         }
         None => {
             let last_stmt_type = stmt_types.last().expect("unreachable");
-            let stmt_subs = unify(last_stmt_type, ty).expect("unreachable");
+            let stmt_subs = unify(last_stmt_type, ty, &body.span).expect("unreachable");
 
             env.apply_subs(&stmt_subs);
             subs.extend(stmt_subs);
@@ -336,21 +340,21 @@ macro_rules! int_prim {
 }
 
 // TODO: add apply_env everywhere
-fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TSubst> {
+fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
     match &expr.val {
-        na::Expr::Lit(_) => unify(ty, &int_prim!()),
+        na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.span),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
         na::Expr::Div(left, right) | na::Expr::Pow(left, right) => {
-            let mut subs = unify(ty, &int_prim!())?;
+            let mut subs = unify(ty, &int_prim!(), &expr.span)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
             let subs2 = typecheck(env, &*right, &int_prim!())?;
             subs.extend(subs1);
             subs.extend(subs2);
-            Some(subs)
+            Ok(subs)
         }
         na::Expr::Eq(left, right) | na::Expr::NotEq(left, right) => {
-            let mut subs = unify(ty, &Type::ADT(String::from("Bool")))?;
+            let mut subs = unify(ty, &Type::ADT(String::from("Bool")), &expr.span)?;
 
             let new_tvar = env.new_tvar();
             let subs1 = typecheck(env, &*left, &new_tvar)?;
@@ -360,23 +364,23 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TS
 
             subs.extend(subs1);
             subs.extend(subs2);
-            Some(subs)
+            Ok(subs)
         }
         na::Expr::LtEq(left, right) | na::Expr::GtEq(left, right) | na::Expr::Lt(left, right) |
         na::Expr::Gt(left, right) => {
-            let mut subs = unify(ty, &Type::ADT(String::from("Bool")))?;
+            let mut subs = unify(ty, &Type::ADT(String::from("Bool")), &expr.span)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
             let subs2 = typecheck(env, &*right, &int_prim!())?;
             subs.extend(subs1);
             subs.extend(subs2);
-            Some(subs)
+            Ok(subs)
         }
 
         na::Expr::Id(id) => {
             match env.sym_type.get(&id) {
                 Some(sym_type) => {
-                    unify(ty, sym_type)
+                    unify(ty, sym_type, &expr.span)
                 }
                 // if we encounter an id without an id, make a tvar and keep
                 // going. we'll verify the type later when we check whatever
@@ -384,7 +388,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TS
                 None => {
                     let id_tvar = env.new_tvar();
                     env.sym_type.insert(*id, id_tvar.clone());
-                    unify(ty, &id_tvar)
+                    unify(ty, &id_tvar, &expr.span)
                 }
             }
         }
@@ -400,7 +404,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TS
             }
 
             let out_tvar = env.new_tvar();
-            let out_subs = unify(&ty, &out_tvar)?;
+            let out_subs = unify(&ty, &out_tvar, &expr.span)?;
             let out_type = apply(&out_subs, out_tvar);
             subs.extend(out_subs);
 
@@ -414,10 +418,10 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TS
                     fn_tvar
                 }
             };
-            let fn_subs = unify(&fn_sym_type, &fn_type)?;
+            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.span)?;
             subs.extend(fn_subs);
 
-            Some(subs)
+            Ok(subs)
         }
 
         na::Expr::ADTVal(id, args) => {
@@ -432,10 +436,10 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TS
                 subs.extend(arg_subs);
             }
 
-            let out_subs = unify(&ty, &val_out_type)?;
+            let out_subs = unify(&ty, &val_out_type, &expr.span)?;
             subs.extend(out_subs);
 
-            Some(subs)
+            Ok(subs)
         }
     }
 }
@@ -460,7 +464,7 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
     }
 }
 
-fn unify(left: &Type, right: &Type) -> Option<TSubst> {
+fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
             if id1 == id2 {
@@ -508,23 +512,25 @@ fn unify(left: &Type, right: &Type) -> Option<TSubst> {
         }
         (Type::Func(args1, out1), Type::Func(args2, out2)) => {
             if args1.len() != args2.len() {
-                return None
+                None
+            }
+            else {
+                let mut subs = HashMap::new();
+                for (arg1, arg2) in args1.iter().zip(args2) {
+                    let arg_subs = unify(&apply(&subs, *arg1.clone()), &apply(&subs, *arg2.clone()), span)?;
+                    subs.extend(arg_subs);
+                }
+
+                let out_subs = unify(&apply(&subs, *out1.clone()), &apply(&subs, *out2.clone()), span)?;
+                subs.extend(out_subs);
+
+                Some(subs)
             }
 
-            let mut subs = HashMap::new();
-            for (arg1, arg2) in args1.iter().zip(args2) {
-                let arg_subs = unify(&apply(&subs, *arg1.clone()), &apply(&subs, *arg2.clone()))?;
-                subs.extend(arg_subs);
-            }
-
-            let out_subs = unify(&apply(&subs, *out1.clone()), &apply(&subs, *out2.clone()))?;
-            subs.extend(out_subs);
-
-            Some(subs)
         }
 
         _ => None
-    }
+    }.ok_or(TypeErr {message: String::from("Unification failed"), span: span.clone()})
 }
 
 fn tvars(ty: &Type) -> HashSet<TVarID> {
@@ -546,25 +552,27 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
 
 #[test]
 fn unify_prim() {
-    let res = unify(&int_prim!(), &int_prim!());
-    assert_eq!(res.is_some(), true);
+    let res = unify(&int_prim!(), &int_prim!(), &Span {start: 0, end: 0});
+    assert_eq!(res.is_ok(), true);
 
-    let res = unify(&int_prim!(), &Type::Prim(String::from("Float")));
-    assert_eq!(res.is_some(), false);
+    let res = unify(&int_prim!(), &Type::Prim(String::from("Float")), &Span {start: 0, end: 0});
+    assert_eq!(res.is_ok(), false);
 }
 
 #[test]
 fn unify_fn() {
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
-        &Type::Func(vec![Box::from(int_prim!())], Box::from(int_prim!()))
+        &Type::Func(vec![Box::from(int_prim!())], Box::from(int_prim!())),
+        &Span {start: 0, end: 0}
     );
-    assert_eq!(res.is_some(), true);
+    assert_eq!(res.is_ok(), true);
     assert_eq!(*res.expect("").get(&0).expect(""), int_prim!());
 
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
-        &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(String::from("Bool"))))
+        &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(String::from("Bool")))),
+        &Span {start: 0, end: 0}
     );
-    assert_eq!(res.is_some(), false);
+    assert_eq!(res.is_ok(), false);
 }

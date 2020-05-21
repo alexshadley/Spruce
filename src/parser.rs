@@ -34,8 +34,8 @@ lazy_static! {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Span {
-    start: usize,
-    end: usize
+    pub start: usize,
+    pub end: usize
 }
 
 impl Span {
