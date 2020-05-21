@@ -103,3 +103,18 @@ statements.
 |---------|--------|
 | Code Generation | :heavy_check_mark: |
 | Indentation | :heavy_check_mark: |
+| Output Optimization | |
+
+The compiler currently however generates javascript that faithfully executes
+the instructions provided by the source Spruce. However, no optimization is
+done on this output, which is of course very important if we want anyone to
+seriously consider using Spruce. Compier optimization is a massive topic
+deserving of much more than one table row, likely its own section once work on
+optimization starts.
+
+## Miscellaneous
+
+| Feature | Status |
+|---------|--------|
+| Assignment From Case | |
+| Multiple Assignment| |
