@@ -1,3 +1,8 @@
+id(x) {
+    x
+}
+
 main() {
-    foo(f, g, 1)
+    i = id(1)
+    b = id(True)
 }

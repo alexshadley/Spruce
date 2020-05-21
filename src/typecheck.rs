@@ -55,12 +55,13 @@ impl Type {
     }
 }
 
+// TODO: split symbols into "active" and "static", that way we don't continue
+// refining fn types when we apply them
 #[derive(Debug)]
 pub struct Environment {
     next_type_var: TVarID,
     sym_type: HashMap<na::SymbolID, Type>,
     val_type: HashMap<na::ADTValID, Type>,
-    //in_progress: HashSet<na::SymbolID>
 }
 
 impl Environment {
