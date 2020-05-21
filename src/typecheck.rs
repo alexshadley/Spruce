@@ -110,14 +110,14 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, String> {
     }
 
     for stmt in &prog.definitions {
-        match stmt {
+        match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
                 let stmt_tvar = env.new_tvar();
-                let subs = typecheck(&mut env, expr, &stmt_tvar);
+                let subs = typecheck(&mut env, &expr, &stmt_tvar);
                 match subs {
                     Some(s) => {
                         let stmt_type = apply(&s, stmt_tvar);
-                        env.sym_type.insert(tgt.id(), stmt_type);
+                        env.sym_type.insert(tgt.val.id(), stmt_type);
                     }
                     None => {
                         return Err(String::from(format!("Unification failed for expr: {:?}", expr)))
@@ -135,23 +135,23 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, String> {
     Ok(env)
 }
 
-fn check_func(env: &mut Environment, func: &na::Func) -> Result<bool, String> {
+fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, String> {
     let mut arg_types = Vec::new();
-    for arg in &func.args {
+    for arg in &func.val.args {
         let arg_tvar = env.new_tvar();
         env.sym_type.insert(*arg, arg_tvar.clone());
         arg_types.push(Box::from(arg_tvar));
     }
     let ret_tvar = env.new_tvar();
     let fn_type = Type::Func(arg_types, Box::from(ret_tvar.clone()));
-    let body_subs = check_body(env, &func.body, &ret_tvar)?;
+    let body_subs = check_body(env, &func.val.body, &ret_tvar)?;
 
     let refined_fn_type = apply(&body_subs, fn_type);
     env.apply_subs(&body_subs);
 
     // it's possible that the function id is already assigned a type from an
     // earlier typecheck if it appeared in a function call
-    match env.sym_type.get(&func.name) {
+    match env.sym_type.get(&func.val.name) {
         Some(env_fn_type) => {
             match unify(env_fn_type, &refined_fn_type) {
                 Some(subs) => {
@@ -163,7 +163,7 @@ fn check_func(env: &mut Environment, func: &na::Func) -> Result<bool, String> {
             };
         }
         None => {
-            env.sym_type.insert(func.name, refined_fn_type);
+            env.sym_type.insert(func.val.name, refined_fn_type);
         }
     };
 
@@ -173,11 +173,11 @@ fn check_func(env: &mut Environment, func: &na::Func) -> Result<bool, String> {
 /// Returns tuple of type subs and a bool indicating if the case has a valid
 /// type. Unlinke other structures, it's ok for a case not to have a type in
 /// some circumstances.
-fn check_case(env: &mut Environment, case: &na::Case, ty: &Type) -> Result<TSubst, String> {
+fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, String> {
     let mut subs = HashMap::new();
 
     let expr_tvar = env.new_tvar();
-    let expr_subs = typecheck(env, &case.expr, &expr_tvar).expect("failed typecheck");
+    let expr_subs = typecheck(env, &case.val.expr, &expr_tvar).expect("failed typecheck");
     let expr_type = apply(&expr_subs, expr_tvar);
     env.apply_subs(&expr_subs);
     subs.extend(expr_subs);
@@ -185,8 +185,8 @@ fn check_case(env: &mut Environment, case: &na::Case, ty: &Type) -> Result<TSubs
 
     // start by analyzing patterns
     let mut pattern_type = String::from("");
-    for opt in &case.options {
-        let opt_pat_type = match env.val_type.get(&opt.pattern.base).expect("dangling type id") {
+    for opt in &case.val.options {
+        let opt_pat_type = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
             Type::Func(args, out) => {
                 match &**out {
                     Type::ADT(name) => name,
@@ -211,19 +211,19 @@ fn check_case(env: &mut Environment, case: &na::Case, ty: &Type) -> Result<TSubs
 
     let mut is_unit = false;
     let mut has_expr = false;
-    for opt in &case.options {
-        let pattern_arg_types = match env.val_type.get(&opt.pattern.base).expect("dangling type id") {
+    for opt in &case.val.options {
+        let pattern_arg_types = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
             Type::Func(args, _) => args,
             _ => unreachable!()
         };
 
-        for (arg, ty) in opt.pattern.args.iter().zip(pattern_arg_types) {
+        for (arg, ty) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
             let arg_type: Type = (**ty).clone();
             env.sym_type.insert(*arg, arg_type);
         }
 
 
-        match &opt.body {
+        match &opt.val.body.val {
             na::CaseBody::Body(body) => {
                 let opt_tvar = env.new_tvar();
                 let opt_subs = check_body(env, &body, &opt_tvar)?;
@@ -264,17 +264,17 @@ fn check_case(env: &mut Environment, case: &na::Case, ty: &Type) -> Result<TSubs
     Ok(subs)
 }
 
-fn check_body(env: &mut Environment, body: &na::Body, ty: &Type) -> Result<TSubst, String> {
+fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<TSubst, String> {
     let mut stmt_types = Vec::new();
     let mut subs = HashMap::new();
-    for stmt in &body.stmts {
-        match stmt {
+    for stmt in &body.val.stmts {
+        match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
                 let new_tvar = env.new_tvar();
                 let stmt_subs = typecheck(env, expr, &new_tvar).expect("typecheck stmt failed");
                 let var_type = apply(&stmt_subs, new_tvar);
                 
-                env.sym_type.insert(tgt.id(), var_type.clone());
+                env.sym_type.insert(tgt.val.id(), var_type.clone());
                 env.apply_subs(&stmt_subs);
 
                 stmt_types.push(var_type);
@@ -294,7 +294,10 @@ fn check_body(env: &mut Environment, body: &na::Body, ty: &Type) -> Result<TSubs
             // might want to make this change soon
             na::Stmt::FnCall(id, args) => {
                 let cloned_args = args.iter().map(|arg| { Box::from(arg.clone()) }).collect();
-                let fn_expr = na::Expr::FnCall(id.clone(), cloned_args);
+                let fn_expr = na::ExprNode {
+                    val: na::Expr::FnCall(id.clone(), cloned_args),
+                    span: stmt.span.clone()
+                };
 
                 let new_tvar = env.new_tvar();
                 let fn_subs = typecheck(env, &fn_expr, &new_tvar).expect("typecheck function failed");
@@ -308,7 +311,7 @@ fn check_body(env: &mut Environment, body: &na::Body, ty: &Type) -> Result<TSubs
         }
     }
 
-    match &body.expr {
+    match &body.val.expr {
         Some(expr) => {
             let expr_subs = typecheck(env, &expr, ty).expect("typecheck return expr failed");
             env.apply_subs(&expr_subs);
@@ -333,15 +336,15 @@ macro_rules! int_prim {
 }
 
 // TODO: add apply_env everywhere
-fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst> {
-    match expr {
+fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Option<TSubst> {
+    match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!()),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
         na::Expr::Div(left, right) | na::Expr::Pow(left, right) => {
             let mut subs = unify(ty, &int_prim!())?;
 
-            let subs1 = typecheck(env, left, &int_prim!())?;
-            let subs2 = typecheck(env, right, &int_prim!())?;
+            let subs1 = typecheck(env, &*left, &int_prim!())?;
+            let subs2 = typecheck(env, &*right, &int_prim!())?;
             subs.extend(subs1);
             subs.extend(subs2);
             Some(subs)
@@ -350,10 +353,10 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
             let mut subs = unify(ty, &Type::ADT(String::from("Bool")))?;
 
             let new_tvar = env.new_tvar();
-            let subs1 = typecheck(env, left, &new_tvar)?;
+            let subs1 = typecheck(env, &*left, &new_tvar)?;
 
             let updated_tvar = apply(&subs1, new_tvar);
-            let subs2 = typecheck(env, right, &updated_tvar)?;
+            let subs2 = typecheck(env, &*right, &updated_tvar)?;
 
             subs.extend(subs1);
             subs.extend(subs2);
@@ -363,15 +366,15 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
         na::Expr::Gt(left, right) => {
             let mut subs = unify(ty, &Type::ADT(String::from("Bool")))?;
 
-            let subs1 = typecheck(env, left, &int_prim!())?;
-            let subs2 = typecheck(env, right, &int_prim!())?;
+            let subs1 = typecheck(env, &*left, &int_prim!())?;
+            let subs2 = typecheck(env, &*right, &int_prim!())?;
             subs.extend(subs1);
             subs.extend(subs2);
             Some(subs)
         }
 
         na::Expr::Id(id) => {
-            match env.sym_type.get(id) {
+            match env.sym_type.get(&id) {
                 Some(sym_type) => {
                     unify(ty, sym_type)
                 }
@@ -391,7 +394,7 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
             let mut arg_types = Vec::new();
             for arg in args {
                 let arg_tvar = env.new_tvar();
-                let arg_subs = typecheck(env, arg, &arg_tvar)?;
+                let arg_subs = typecheck(env, &*arg, &arg_tvar)?;
                 arg_types.push(Box::from(apply(&arg_subs, arg_tvar)));
                 subs.extend(arg_subs);
             }
@@ -403,7 +406,7 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
 
             let fn_type = Type::Func(arg_types, Box::from(out_type));
 
-            let fn_sym_type = match env.sym_type.get(id) {
+            let fn_sym_type = match env.sym_type.get(&id) {
                 Some(sym) => sym.clone(),
                 None => {
                     let fn_tvar = env.new_tvar();
@@ -418,7 +421,7 @@ fn typecheck(env: &mut Environment, expr: &na::Expr, ty: &Type) -> Option<TSubst
         }
 
         na::Expr::ADTVal(id, args) => {
-            let (val_arg_types, val_out_type) = match env.val_type.get(id).expect("dangling type id") {
+            let (val_arg_types, val_out_type) = match env.val_type.get(&id).expect("dangling type id") {
                 Type::Func(args, out) => (args.clone(), out.clone()),
                 _ => panic!("ADT Value with non-function type")
             };

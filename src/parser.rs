@@ -32,34 +32,64 @@ lazy_static! {
     Float(f64),
 }*/
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct Span {
+    start: usize,
+    end: usize
+}
+
+impl Span {
+    fn from(sp: pest::Span) -> Self {
+        Span {start: sp.start(), end: sp.end() }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum Expr {
-    Add(Box<Expr>, Box<Expr>),
-    Mult(Box<Expr>, Box<Expr>),
-    Subt(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
-    Pow(Box<Expr>, Box<Expr>),
-    FnCall(String, Vec<Box<Expr>>),
+    Add(Box<ExprNode>, Box<ExprNode>),
+    Mult(Box<ExprNode>, Box<ExprNode>),
+    Subt(Box<ExprNode>, Box<ExprNode>),
+    Div(Box<ExprNode>, Box<ExprNode>),
+    Pow(Box<ExprNode>, Box<ExprNode>),
+    FnCall(String, Vec<Box<ExprNode>>),
     Id(String),
     Lit(f64),
-    Eq(Box<Expr>, Box<Expr>),
-    NotEq(Box<Expr>, Box<Expr>),
-    LtEq(Box<Expr>, Box<Expr>),
-    GtEq(Box<Expr>, Box<Expr>),
-    Lt(Box<Expr>, Box<Expr>),
-    Gt(Box<Expr>, Box<Expr>),
+    Eq(Box<ExprNode>, Box<ExprNode>),
+    NotEq(Box<ExprNode>, Box<ExprNode>),
+    LtEq(Box<ExprNode>, Box<ExprNode>),
+    GtEq(Box<ExprNode>, Box<ExprNode>),
+    Lt(Box<ExprNode>, Box<ExprNode>),
+    Gt(Box<ExprNode>, Box<ExprNode>),
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ExprNode {
+    pub val: Expr,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Body {
-    pub stmts: Vec<Stmt>,
-    pub expr: Option<Expr>
+    pub stmts: Vec<StmtNode>,
+    pub expr: Option<ExprNode>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct BodyNode {
+    pub val: Body,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Case {
-    pub expr: Expr,
-    pub options: Vec<CaseOption>
+    pub expr: ExprNode,
+    pub options: Vec<CaseOptionNode>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CaseNode {
+    pub val: Case,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,30 +98,62 @@ pub struct CasePattern {
     pub args: Vec<String> 
 }
 
+#[derive(Debug, PartialEq)]
+pub struct CasePatternNode {
+    pub val: CasePattern,
+    pub span: Span
+}
+
 
 #[derive(Debug, PartialEq)]
 pub struct CaseOption {
-    pub pattern: CasePattern,
-    pub body: CaseBody
+    pub pattern: CasePatternNode,
+    pub body: CaseBodyNode
+}
+
+#[derive(Debug, PartialEq)]
+pub struct CaseOptionNode {
+    pub val: CaseOption,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CaseBody {
-    Expr(Expr),
-    Body(Body)
+    Expr(ExprNode),
+    Body(BodyNode)
 }
 
 #[derive(Debug, PartialEq)]
+pub struct CaseBodyNode {
+    pub val: CaseBody,
+    pub span: Span
+}
+
+// this will allow case statements to be assigned to variables, when 
+// that feature is impelmented
+#[derive(Debug, PartialEq)]
 pub enum Valued {
-    Expr(Expr),
-    Case(Case)
+    Expr(ExprNode),
+    Case(CaseNode)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ValuedNode {
+    pub val: Valued,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
-    Assign(Target, Expr),
-    FnCall(String, Vec<Expr>),
-    Case(Case)
+    Assign(TargetNode, ExprNode),
+    FnCall(String, Vec<ExprNode>),
+    Case(CaseNode)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StmtNode {
+    pub val: Stmt,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
@@ -102,9 +164,21 @@ pub enum Target {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct TargetNode {
+    pub val: Target,
+    pub span: Span
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Type {
     pub name: String,
-    pub options: Vec<TypeOption>
+    pub options: Vec<TypeOptionNode>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeNode {
+    pub val: Type,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,53 +188,73 @@ pub struct TypeOption {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct TypeOptionNode {
+    pub val: TypeOption,
+    pub span: Span
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: String,
     pub args: Vec<String>,
-    pub body: Body
+    pub body: BodyNode
+}
+
+#[derive(Debug, PartialEq)]
+pub struct FuncNode {
+    pub val: Func,
+    pub span: Span
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
-    pub functions: Vec<Func>,
-    pub definitions: Vec<Stmt>,
-    pub types: Vec<Type>
+    pub functions: Vec<FuncNode>,
+    pub definitions: Vec<StmtNode>,
+    pub types: Vec<TypeNode>
 }
 
-fn to_expr(expr: Pair<Rule>) -> Expr {
+fn to_expr(expr: Pair<Rule>) -> ExprNode {
     PREC_CLIMBER.climb(
         expr.into_inner(),
         |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::id => Expr::Id(String::from(pair.as_str())),
-            Rule::num => Expr::Lit(pair.as_str().parse::<f64>().unwrap()),
+            Rule::id => ExprNode {val: Expr::Id(String::from(pair.as_str())), span: Span::from(pair.as_span())},
+            Rule::num => ExprNode {val: Expr::Lit(pair.as_str().parse::<f64>().unwrap()), span: Span::from(pair.as_span())},
             Rule::expr => to_expr(pair),
             Rule::fn_call => {
+                let pair_span = pair.as_span();
+
                 let mut children = pair.into_inner();
                 let id = String::from(children.next().unwrap().as_str());
                 let args = children.into_iter().map(|arg| { Box::from(to_expr(arg)) }).collect();
 
-                Expr::FnCall(id, args)
+                ExprNode {val: Expr::FnCall(id, args), span: Span::from(pair_span)}
             }
             _ => unreachable!(),
         },
-        |lhs: Expr, op: Pair<Rule>, rhs: Expr| match op.as_rule() {
-            Rule::add      => Expr::Add(Box::from(lhs), Box::from(rhs)),
-            Rule::subtract => Expr::Subt(Box::from(lhs), Box::from(rhs)),
-            Rule::multiply => Expr::Mult(Box::from(lhs), Box::from(rhs)),
-            Rule::divide   => Expr::Div(Box::from(lhs), Box::from(rhs)),
-            Rule::power    => Expr::Pow(Box::from(lhs), Box::from(rhs)),
-            Rule::eq       => Expr::Eq(Box::from(lhs), Box::from(rhs)),
-            Rule::not_eq   => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
-            Rule::lt_eq    => Expr::LtEq(Box::from(lhs), Box::from(rhs)),
-            Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
-            Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
-            Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
-            _ => unreachable!(),
+        |lhs: ExprNode, op: Pair<Rule>, rhs: ExprNode| {
+            let expr = match op.as_rule() {
+                Rule::add      => Expr::Add(Box::from(lhs), Box::from(rhs)),
+                Rule::subtract => Expr::Subt(Box::from(lhs), Box::from(rhs)),
+                Rule::multiply => Expr::Mult(Box::from(lhs), Box::from(rhs)),
+                Rule::divide   => Expr::Div(Box::from(lhs), Box::from(rhs)),
+                Rule::power    => Expr::Pow(Box::from(lhs), Box::from(rhs)),
+                Rule::eq       => Expr::Eq(Box::from(lhs), Box::from(rhs)),
+                Rule::not_eq   => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
+                Rule::lt_eq    => Expr::LtEq(Box::from(lhs), Box::from(rhs)),
+                Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
+                Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
+                Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
+                _ => unreachable!(),
+            };
+
+            ExprNode {val: expr, span: Span::from(op.as_span())}
         },
     )
 }
 
-fn to_body(body: Pair<Rule>) -> Body {
+fn to_body(body: Pair<Rule>) -> BodyNode {
+    let body_span = body.as_span();
+
     let mut stmts = Vec::new();
     let mut expr = Option::None;
     for element in body.into_inner() {
@@ -178,33 +272,56 @@ fn to_body(body: Pair<Rule>) -> Body {
         }
     };
 
-    Body {
+    let body_struct = Body {
         stmts: stmts,
         expr: expr
-    }
-}
-
-fn to_case_option(option: Pair<Rule>) -> CaseOption {
-    let mut children = option.into_inner();
-    let mut pattern_children = children.next().unwrap().into_inner();
-    let pattern_base = String::from(pattern_children.next().unwrap().as_str());
-    let pattern_args = pattern_children.into_iter().map(|arg| { String::from(arg.as_str()) }).collect();
-    let pattern = CasePattern { base: pattern_base, args: pattern_args };
-
-    let body_token = children.next().unwrap();
-    let body = match body_token.as_rule() {
-        Rule::expr => CaseBody::Expr(to_expr(body_token)),
-        Rule::body => CaseBody::Body(to_body(body_token)),
-        _ => unreachable!()
     };
 
-    CaseOption {
-        pattern: pattern,
-        body: body
+    BodyNode {
+        val: body_struct,
+        span: Span::from(body_span)
     }
 }
 
-fn to_case(case: Pair<Rule>) -> Case {
+fn to_case_option(option: Pair<Rule>) -> CaseOptionNode {
+    let option_span = option.as_span();
+
+    let mut children = option.into_inner();
+    let mut pattern_children = children.next().unwrap().into_inner();
+    let pattern_token = pattern_children.next().unwrap();
+    let pattern_base = String::from(pattern_token.as_str());
+    let pattern_args = pattern_children.into_iter().map(|arg| { String::from(arg.as_str()) }).collect();
+    let pattern = CasePatternNode {
+        val: CasePattern { base: pattern_base, args: pattern_args },
+        // TODO: make span both base and args
+        span: Span::from(pattern_token.as_span())
+    };
+
+    let body_token = children.next().unwrap();
+    let body_span = body_token.as_span();
+    let body = CaseBodyNode {
+        val: match body_token.as_rule() {
+            Rule::expr => CaseBody::Expr(to_expr(body_token)),
+            Rule::body => CaseBody::Body(to_body(body_token)),
+            _ => unreachable!()
+        },
+        span: Span::from(body_span)
+    };
+
+    let case_option = CaseOption {
+        pattern: pattern,
+        body: body
+    };
+
+    CaseOptionNode {
+        val: case_option,
+        span: Span::from(option_span)
+    }
+}
+
+fn to_case(case: Pair<Rule>) -> CaseNode {
+    let case_span = case.as_span();
+
     let mut children = case.into_inner();
     let expr = to_expr(children.next().unwrap());
 
@@ -213,22 +330,34 @@ fn to_case(case: Pair<Rule>) -> Case {
         options.push(to_case_option(option));
     }
 
-    Case {
+    let case_struct = Case {
         expr: expr,
         options: options
+    };
+
+    CaseNode {
+        val: case_struct,
+        span: Span::from(case_span)
     }
 }
 
-fn to_stmt(stmt: Pair<Rule>) -> Stmt {
-    match stmt.as_rule() {
+fn to_stmt(stmt: Pair<Rule>) -> StmtNode {
+    let stmt_span = stmt.as_span();
+
+    let stmt_val = match stmt.as_rule() {
         Rule::assign => {
             let mut children = stmt.into_inner();
             let tgt = children.next().unwrap();
-            let target = match tgt.as_rule() {
+            let tgt_span = tgt.as_span();
+            let target_val = match tgt.as_rule() {
                 Rule::id => Target::Var(String::from(tgt.as_str())),
                 Rule::mutable_tgt => Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str())),
                 Rule::update_tgt => Target::Update(String::from(tgt.into_inner().next().unwrap().as_str())),
                 _ => unreachable!()
+            };
+            let target = TargetNode {
+                val: target_val,
+                span: Span::from(tgt_span)
             };
             let expr = to_expr(children.next().unwrap());
             Stmt::Assign(target, expr)
@@ -251,10 +380,16 @@ fn to_stmt(stmt: Pair<Rule>) -> Stmt {
             println!("rule {:?} encountered", stmt.as_rule());
             unreachable!();
         }
+    };
+
+    StmtNode {
+        val: stmt_val,
+        span: Span::from(stmt_span)
     }
 }
 
-fn to_func(mut p: Pair<Rule>) -> Func {
+fn to_func(mut p: Pair<Rule>) -> FuncNode {
+    let func_span = p.as_span();
     let mut func = p.into_inner();
 
     let id = String::from(func.next().unwrap().as_str());
@@ -267,14 +402,21 @@ fn to_func(mut p: Pair<Rule>) -> Func {
 
     let body = to_body(func.next().unwrap());
 
-    Func {
+    let func = Func {
         name: id,
         args: arg_vec,
         body: body
+    };
+
+    FuncNode {
+        val: func,
+        span: Span::from(func_span)
     }
 }
 
-fn to_type_option(option: Pair<Rule>) -> TypeOption {
+fn to_type_option(option: Pair<Rule>) -> TypeOptionNode {
+    let option_span = option.as_span();
+
     let mut children = option.into_inner();
 
     let name = String::from(children.next().unwrap().as_str());
@@ -283,13 +425,19 @@ fn to_type_option(option: Pair<Rule>) -> TypeOption {
     for arg in children {
         args.push(String::from(arg.as_str()));
     }
-    TypeOption {
+    let type_option_val = TypeOption {
         name: name,
         args: args
+    };
+
+    TypeOptionNode {
+        val: type_option_val,
+        span: Span::from(option_span)
     }
 }
 
-fn to_type(mut t: Pair<Rule>) -> Type {
+fn to_type(mut t: Pair<Rule>) -> TypeNode {
+    let type_span = t.as_span();
     let mut children = t.into_inner();
 
     let name = String::from(children.next().unwrap().as_str());
@@ -299,9 +447,14 @@ fn to_type(mut t: Pair<Rule>) -> Type {
         options.push(to_type_option(option));
     }
 
-    Type {
+    let type_val = Type {
         name: name,
         options: options
+    };
+
+    TypeNode {
+        val: type_val,
+        span: Span::from(type_span)
     }
 }
 
