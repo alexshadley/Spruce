@@ -211,7 +211,7 @@ fn gen_sym(table: &SymbolTable, id: &SymbolID) -> String {
 
 fn gen_adtval(types: &TypeTableExt, id: &ADTValID) -> String {
     let val = types.values.get(id).expect("Symbol not found");
-    let adt = types.types.get(&id).expect("Dangling type id");
+    let adt = types.types.get(&val.data_type).expect("Dangling type id");
     String::from(format!("{}.{}", adt.name, val.name.to_ascii_uppercase()))
 }
 

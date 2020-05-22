@@ -53,7 +53,7 @@ impl Type {
                     for arg in args.iter().skip(1) {
                         output = format!("{}, {}", output, arg.as_str_inner(prog, tvar_names, next_name));
                     };
-                    output
+                    format!("{})", output)
                 }
             }
             Type::Func(args, out) => {
@@ -71,12 +71,15 @@ impl Type {
     }
 }
 
-// TODO: split symbols into "active" and "static", that way we don't continue
-// refining fn types when we apply them
 #[derive(Debug)]
 pub struct Environment {
     next_type_var: TVarID,
-    sym_type: HashMap<na::SymbolID, Type>,
+
+    // once we finish refining a type, it is 'flushed' into the complete
+    // table, where sub applications will not affect it
+    active_sym_type: HashMap<na::SymbolID, Type>,
+    complete_sym_type: HashMap<na::SymbolID, Type>,
+
     adt_type: HashMap<na::ADTID, Type>,
     val_type: HashMap<na::ADTValID, Type>,
 
@@ -86,7 +89,14 @@ pub struct Environment {
 
 impl Environment {
     fn new(bool_id: na::ADTID) -> Self {
-        Environment {next_type_var: 0, sym_type: HashMap::new(), val_type: HashMap::new(), adt_type: HashMap::new(), bool_id: bool_id}
+        Environment {
+            next_type_var: 0,
+            complete_sym_type: HashMap::new(), 
+            active_sym_type: HashMap::new(), 
+            val_type: HashMap::new(), 
+            adt_type: HashMap::new(),
+            bool_id: bool_id
+        }
     }
 
     fn new_tvar(&mut self) -> Type {
@@ -94,15 +104,32 @@ impl Environment {
         Type::TVar(self.next_type_var - 1)
     }
 
+    fn get_sym_type(&self, id: &na::SymbolID) -> Option<&Type> {
+        match self.active_sym_type.get(id) {
+            Some(ty) => Some(ty),
+            None => {
+                self.complete_sym_type.get(id)
+            }
+        }
+    }
+
+    fn insert_sym_type(&mut self, id: na::SymbolID, ty: Type) {
+        self.active_sym_type.insert(id, ty);
+    }
+
+    fn flush_active_symbols(&mut self) {
+        self.complete_sym_type.extend(self.active_sym_type.drain());
+    }
+
     fn apply_subs(&mut self, subs: &TSubst) {
-        self.sym_type = self.sym_type.iter().map(|(k, ty)| {
+        self.active_sym_type = self.active_sym_type.iter().map(|(k, ty)| {
             (*k, apply(subs, (*ty).clone()))
         }).collect();
     }
 
     pub fn as_str(&self, prog: &na::Prog) -> String {
         let mut output = String::from("");
-        for (id, ty) in &self.sym_type {
+        for (id, ty) in &self.complete_sym_type {
             let name = prog.symbol_table.store.get(id).expect("dangling symbol id").name.clone();
             output = format!("{}{} : {}\n", output, name, ty.as_str(prog));
         }
@@ -147,6 +174,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
 
         env.val_type.insert(val.id, Type::Func(args, Box::from(out.clone())));
     }
+    env.flush_active_symbols();
 
     for stmt in &prog.definitions {
         match &stmt.val {
@@ -154,7 +182,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
                 let stmt_tvar = env.new_tvar();
                 let subs = typecheck(&mut env, &expr, &stmt_tvar)?;
                 let stmt_type = apply(&subs, stmt_tvar);
-                env.sym_type.insert(tgt.val.id(), stmt_type);
+                env.insert_sym_type(tgt.val.id(), stmt_type);
             }
             _ => unreachable!()
         }
@@ -171,7 +199,7 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
     let mut arg_types = Vec::new();
     for arg in &func.val.args {
         let arg_tvar = env.new_tvar();
-        env.sym_type.insert(*arg, arg_tvar.clone());
+        env.insert_sym_type(*arg, arg_tvar.clone());
         arg_types.push(Box::from(arg_tvar));
     }
     let ret_tvar = env.new_tvar();
@@ -183,7 +211,7 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
 
     // it's possible that the function id is already assigned a type from an
     // earlier typecheck if it appeared in a function call
-    match env.sym_type.get(&func.val.name) {
+    match env.get_sym_type(&func.val.name) {
         Some(env_fn_type) => {
             match unify(env_fn_type, &refined_fn_type, &func.span) {
                 Ok(subs) => {
@@ -198,9 +226,11 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
             };
         }
         None => {
-            env.sym_type.insert(func.val.name, refined_fn_type);
+            env.insert_sym_type(func.val.name, refined_fn_type);
         }
     };
+
+    env.flush_active_symbols();
 
     Ok(true)
 }
@@ -253,13 +283,13 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let mut has_expr = false;
     for opt in &case.val.options {
         let pattern_arg_types = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
-            Type::Func(args, _) => args,
+            Type::Func(args, _) => args.clone(),
             _ => unreachable!()
         };
 
         for (arg, ty) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
-            let arg_type: Type = (**ty).clone();
-            env.sym_type.insert(*arg, arg_type);
+            let arg_type: Type = (*ty).clone();
+            env.insert_sym_type(*arg, arg_type);
         }
 
 
@@ -315,7 +345,7 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
             na::Stmt::Assign(tgt, expr) => {
                 match &tgt.val {
                     na::Target::Update(id) => {
-                        let sym_type = env.sym_type.get(id).expect("Dangling symbol id").clone();
+                        let sym_type = env.get_sym_type(id).expect("Dangling symbol id").clone();
                         let stmt_subs = typecheck(env, expr, &sym_type)?;
                         env.apply_subs(&stmt_subs);
 
@@ -328,7 +358,7 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
                         let stmt_subs = typecheck(env, expr, &new_tvar)?;
                         let var_type = apply(&stmt_subs, new_tvar);
                         
-                        env.sym_type.insert(tgt.val.id(), var_type.clone());
+                        env.insert_sym_type(tgt.val.id(), var_type.clone());
                         env.apply_subs(&stmt_subs);
 
                         stmt_types.push(var_type);
@@ -436,7 +466,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
 
         na::Expr::Id(id) => {
-            match env.sym_type.get(&id) {
+            match env.get_sym_type(&id) {
                 Some(sym_type) => {
                     unify(ty, sym_type, &expr.span)
                 }
@@ -445,7 +475,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
                 // the id refers to
                 None => {
                     let id_tvar = env.new_tvar();
-                    env.sym_type.insert(*id, id_tvar.clone());
+                    env.insert_sym_type(*id, id_tvar.clone());
                     unify(ty, &id_tvar, &expr.span)
                 }
             }
@@ -468,11 +498,11 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
 
             let fn_type = Type::Func(arg_types, Box::from(out_type));
 
-            let fn_sym_type = match env.sym_type.get(&id) {
+            let fn_sym_type = match env.get_sym_type(&id) {
                 Some(sym) => sym.clone(),
                 None => {
                     let fn_tvar = env.new_tvar();
-                    env.sym_type.insert(*id, fn_tvar.clone());
+                    env.insert_sym_type(*id, fn_tvar.clone());
                     fn_tvar
                 }
             };
