@@ -13,6 +13,7 @@ exists to coordinate the work of building new features.
 | Char | |
 | String | |
 | Tuple | |
+| Record / Struct | |
 
 In general the Spruce approach to primitives has not revieved a lot of
 thought. My general instinct is to implement as many types as possible in
@@ -44,6 +45,15 @@ lists with JavaScript lists. Ideally interfaces will make it possible for both
 versions of a list to be used in things like for loops. One of the main design
 goals of Spruce is to make list processing easy and expressive with a mix of
 functional and imperative concepts.
+
+## Functions
+
+| Feature | Status |
+|---------|--------|
+| Basic Functions | :heavy_check_mark: |
+| Anonymous (lambda) functions | |
+| Closures | |
+| Optional Arguments | |
 
 ## Type System
 
@@ -103,3 +113,18 @@ statements.
 |---------|--------|
 | Code Generation | :heavy_check_mark: |
 | Indentation | :heavy_check_mark: |
+| Output Optimization | |
+
+The compiler currently however generates javascript that faithfully executes
+the instructions provided by the source Spruce. However, no optimization is
+done on this output, which is of course very important if we want anyone to
+seriously consider using Spruce. Compier optimization is a massive topic
+deserving of much more than one table row, likely its own section once work on
+optimization starts.
+
+## Miscellaneous
+
+| Feature | Status |
+|---------|--------|
+| Assignment From Case | |
+| Multiple Assignment| |

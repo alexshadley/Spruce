@@ -3,7 +3,8 @@ file = _{ SOI ~ (top_stmt | empty_line)* ~ EOI }
 top_stmt = _{ ( function_decl | type_decl | assign ) ~ "\n" }
 stmt = _{ ( assign | fn_call | case ) ~ "\n" }
 
-type_decl = { "type" ~ id ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
+type_decl = { "type" ~ id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
+type_params = { ("(" ~ id ~ ("," ~ id)* ~ ")")? }
 type_option = { id ~ ("(" ~ id ~ ("," ~ id)* ~ ")")? }
 
 function_decl = { id ~ fn_args ~ "{\n" ~ body ~ "}" }
