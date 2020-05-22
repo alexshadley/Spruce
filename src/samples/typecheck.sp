@@ -1,5 +1,6 @@
-id(x) {
-    x
+Maybe(a) {
+    Just(a)
+    Nothing
 }
 
 main() {

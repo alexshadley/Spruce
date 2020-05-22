@@ -41,7 +41,7 @@ impl Type {
             Type::Unit => String::from("()"),
             Type::Prim(name) => name.clone(),
             Type::ADT(id, args) => {
-                let name = prog.type_table.types.get(id).expect("dangling type id").name;
+                let name = prog.type_table.types.get(id).expect("dangling type id").name.clone();
                 if args.len() == 0 {
                     name.clone()
                 }
@@ -79,11 +79,14 @@ pub struct Environment {
     sym_type: HashMap<na::SymbolID, Type>,
     adt_type: HashMap<na::ADTID, Type>,
     val_type: HashMap<na::ADTValID, Type>,
+
+    // prelude adts are used internally, so we need to record their type ids
+    bool_id: na::ADTID
 }
 
 impl Environment {
-    fn new() -> Self {
-        Environment {next_type_var: 0, sym_type: HashMap::new(), val_type: HashMap::new(), adt_type: HashMap::new()}
+    fn new(bool_id: na::ADTID) -> Self {
+        Environment {next_type_var: 0, sym_type: HashMap::new(), val_type: HashMap::new(), adt_type: HashMap::new(), bool_id: bool_id}
     }
 
     fn new_tvar(&mut self) -> Type {
@@ -110,22 +113,8 @@ impl Environment {
 
 type TSubst = HashMap<TVarID, Type>;
 
-/*fn id_to_type(prog: &na::Prog, id: &na::TypeID) -> Type {
-    match id {
-        na::TypeID::ADT(adt_id) => {
-            let adt = prog.type_table.types.get(adt_id).expect("dangling type id");
-            Type::ADT(adt_id, adt.)
-        }
-    }
-    if prog.type_table.primitives.contains(s) {
-        Type::Prim(s.clone())
-    }
-    else {
-    }
-}*/
-
 pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
-    let mut env = Environment::new();
+    let mut env = Environment::new(prog.bool_id);
 
     let mut tparams: HashMap<na::TParamID, Type> = HashMap::new();
     let mut adts: HashMap<na::ADTID, Type> = HashMap::new();
@@ -133,7 +122,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
         let adt_params = ty.type_params.iter();
         let tvars = adt_params.map(|id| {
             let tvar = env.new_tvar();
-            tparams.insert(*id, tvar);
+            tparams.insert(*id, tvar.clone());
             Box::from(tvar)
         }).collect();
 
@@ -228,31 +217,35 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
 
 
     // start by analyzing patterns
-    let mut pattern_type = String::from("");
+    let mut pattern_type_id = None;
     for opt in &case.val.options {
-        let opt_pat_type = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
+        let opt_pat_type_id = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
             Type::Func(args, out) => {
                 match &**out {
-                    Type::ADT(name) => name,
+                    Type::ADT(id, _) => id,
                     _ => unreachable!()
                 }
             }
             _ => unreachable!()
         };
-        if pattern_type == "" {
-            pattern_type = (*opt_pat_type).clone();
-        }
-        else {
-            if pattern_type != *opt_pat_type {
-                return Err(TypeErr {
-                    message: format!("case statement has patterns of both types {} and {}", pattern_type, opt_pat_type),
-                    span: opt.val.pattern.span.clone()
-                })
+        match pattern_type_id {
+            None => {
+                pattern_type_id = Some(*opt_pat_type_id);
+            }
+            Some(pat_type_id) => {
+                if pat_type_id != *opt_pat_type_id {
+                    return Err(TypeErr {
+                        message: format!("case statement has patterns of both types {} and {}", pat_type_id, opt_pat_type_id),
+                        span: opt.val.pattern.span.clone()
+                    })
+                }
             }
         }
     }
 
-    let pattern_subs = unify(&expr_type, &Type::ADT(pattern_type), &case.span)?;
+    let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id");
+
+    let pattern_subs = unify(&expr_type, adt_type, &case.span)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -398,6 +391,12 @@ macro_rules! int_prim {
     };
 }
 
+macro_rules! bool_adt {
+    ($e:ident) => {
+        Type::ADT($e.bool_id, vec![])
+    };
+}
+
 // TODO: add apply_env everywhere
 fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
     match &expr.val {
@@ -413,7 +412,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             Ok(subs)
         }
         na::Expr::Eq(left, right) | na::Expr::NotEq(left, right) => {
-            let mut subs = unify(ty, &Type::ADT(String::from("Bool")), &expr.span)?;
+            let mut subs = unify(ty, &bool_adt!(env), &expr.span)?;
 
             let new_tvar = env.new_tvar();
             let subs1 = typecheck(env, &*left, &new_tvar)?;
@@ -427,7 +426,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
         na::Expr::LtEq(left, right) | na::Expr::GtEq(left, right) | na::Expr::Lt(left, right) |
         na::Expr::Gt(left, right) => {
-            let mut subs = unify(ty, &Type::ADT(String::from("Bool")), &expr.span)?;
+            let mut subs = unify(ty, &bool_adt!(env), &expr.span)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
             let subs2 = typecheck(env, &*right, &int_prim!())?;
@@ -514,7 +513,11 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
         }
         Type::Unit => ty,
         Type::Prim(_) => ty,
-        Type::ADT(_) => ty,
+        Type::ADT(id, params) => {
+            let new_params = params.iter().map(|p| { Box::from(apply(subs, (**p).clone())) }).collect();
+
+            Type::ADT(*id, new_params)
+        }
         Type::Func(args, out) => {
             let new_args = args.iter().map(|arg| { Box::from(apply(subs, (**arg).clone())) }).collect();
 
@@ -561,9 +564,15 @@ fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
             }
         }
 
-        (Type::ADT(ty1), Type::ADT(ty2)) => {
+        (Type::ADT(ty1, tparams1), Type::ADT(ty2, tparams2)) => {
             if ty1 == ty2 {
-                Some(HashMap::new())
+                let mut subs = HashMap::new();
+                for (tparam1, tparam2) in tparams1.iter().zip(tparams2) {
+                    let arg_subs = unify(&apply(&subs, *tparam1.clone()), &apply(&subs, *tparam2.clone()), span)?;
+                    subs.extend(arg_subs);
+                }
+
+                Some(subs)
             }
             else {
                 None
@@ -597,7 +606,14 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
         Type::TVar(id) => HashSet::from_iter(vec![*id]),
         Type::Unit => HashSet::new(),
         Type::Prim(_) => HashSet::new(),
-        Type::ADT(_) => HashSet::new(),
+        Type::ADT(_, tparams) => {
+            let mut vars = HashSet::new();
+            for p in tparams {
+                let param_vars = tvars(p);
+                vars.extend(param_vars);
+            }
+            vars
+        }
         Type::Func(args, out) => {
             let mut vars = HashSet::new();
             for arg in args {
@@ -630,7 +646,7 @@ fn unify_fn() {
 
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
-        &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(String::from("Bool")))),
+        &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(0, vec![]))),
         &Span {start: 0, end: 0}
     );
     assert_eq!(res.is_ok(), false);

@@ -206,7 +206,9 @@ pub struct Prog {
     pub definitions: Vec<StmtNode>,
     pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
-    pub type_table: TypeTableExt
+    pub type_table: TypeTableExt,
+
+    pub bool_id: ADTID
 }
 
 
@@ -226,7 +228,8 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, NameErr> {
     
     sym_table.pop_layer();
 
-    let out_prog = Prog {functions: funcs, definitions: defs, types: types, symbol_table: sym_table, type_table: type_table.to_ext() };
+    let bool_id = type_table.get_type(&String::from("Bool")).expect("Could not find Bool id").id;
+    let out_prog = Prog {functions: funcs, definitions: defs, types: types, symbol_table: sym_table, type_table: type_table.to_ext(), bool_id: bool_id};
     Ok(out_prog)
 }
 
@@ -696,7 +699,7 @@ pub struct TParam {
     pub name: String
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TypeID {
     TParam(TParamID),
     ADT(ADTID),
@@ -764,7 +767,7 @@ impl TypeTable {
         let mut r = self.types.get_mut(data_type);
         match r {
             Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: *args.clone(), data_type: adt.id, id: self.next_val_id};
+                let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
                 self.next_val_id += 1;
                 self.values.insert(new_val.name.clone(), new_val);
             }
@@ -838,7 +841,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
         let type_symbol = type_table.get_type(&t.val.name).expect("unreachable");
         let params: HashMap<String, TParamID> = type_symbol.type_params.iter().map(|id| {
             let tparam = type_table.get_tparam(id).expect("unreachable");
-            (tparam.name, tparam.id)
+            (tparam.name.clone(), tparam.id)
         }).collect();
 
         for v in &t.val.options {
