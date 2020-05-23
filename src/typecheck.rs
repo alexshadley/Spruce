@@ -69,6 +69,40 @@ impl Type {
             }
         }
     }
+    fn as_str_debug(&self) -> String {
+        match self {
+            Type::TVar(id) => format!("t{}", id),
+            Type::Unit => String::from("()"),
+            Type::Prim(name) => name.clone(),
+            Type::ADT(id, args) => {
+                let name = format!("adt{}", id);
+                if args.len() == 0 {
+                    name.clone()
+                }
+                else {
+                    let mut output = format!("{}(", name);
+                    args.first().as_ref().map(|arg| {
+                        output = format!("{}{}", output, arg.as_str_debug());
+                    });
+                    for arg in args.iter().skip(1) {
+                        output = format!("{}, {}", output, arg.as_str_debug());
+                    };
+                    format!("{})", output)
+                }
+            }
+            Type::Func(args, out) => {
+                let mut output = String::from("(");
+                args.first().as_ref().map(|arg| {
+                    output = format!("{}{}", output, arg.as_str_debug());
+                });
+                for arg in args.iter().skip(1) {
+                    output = format!("{}, {}", output, arg.as_str_debug());
+                };
+
+                format!("{}) -> {}", output, out.as_str_debug())
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -557,6 +591,7 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
 }
 
 fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
+    println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
             if id1 == id2 {

@@ -3,18 +3,13 @@ type Maybe(a) {
     Nothing
 }
 
-andThen(fn, m) {
+map(fn, m) {
     case m {
-        Just(x) -> fn(x)
+        Just(x) -> Just(fn(x))
         Nothing -> Nothing
     }
 }
 
-id(x) {
-    x
-}
-
 main() {
-    i = id(Just(5))
-    b = id(Just(True))
+    a = 1
 }
