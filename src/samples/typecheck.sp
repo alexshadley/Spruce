@@ -24,10 +24,7 @@ andThen(fn, m) {
 flatten(m) {
     case m {
         Just(m2) -> {
-            case m2 {
-                Just(v) -> 0
-                Nothing -> 0
-            }
+            m2
         }
         Nothing -> 0
     }

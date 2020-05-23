@@ -307,9 +307,11 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         }
     }
 
-    let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id");
+    let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id").clone();
+    // adding this line fixes nested cases but breaks lots of other things
+    //let adt_type_refreshed = refresh_tvars(env, adt_type);
 
-    let pattern_subs = unify(&expr_type, adt_type, &case.span)?;
+    let pattern_subs = unify(&expr_type, &adt_type, &case.span)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -696,7 +698,7 @@ fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
         }
 
         _ => None
-    }.ok_or(TypeErr {message: String::from("Unification failed"), span: span.clone()})
+    }.ok_or(TypeErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), span: span.clone()})
 }
 
 fn tvars(ty: &Type) -> HashSet<TVarID> {
