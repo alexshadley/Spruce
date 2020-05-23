@@ -181,6 +181,12 @@ pub struct TypeOption {
     pub args: Vec<String>
 }
 
+/*#[derive(Debug, PartialEq)]
+pub struct TypeIdentifier {
+    pub name: String,
+    pub args: Vec<Box<TypeIdentifier>>
+}*/
+
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,
@@ -702,7 +708,7 @@ pub struct TParam {
 #[derive(Debug, PartialEq, Clone)]
 pub enum TypeID {
     TParam(TParamID),
-    ADT(ADTID),
+    ADT(ADTID, Vec<Box<TypeID>>),
     Prim(String),
 }
 
@@ -851,37 +857,12 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
 
             let mut arg_ids = Vec::new();
             for arg in &v.val.args {
-                match (params.get(arg), type_table.types.get(arg), type_table.primitives.get(arg)) {
-                    (Some(tparam_id), _, _) => {
-                        arg_ids.push(TypeID::TParam(*tparam_id));
-                    }
-                    (_, Some(adt), _) => {
-                        arg_ids.push(TypeID::ADT(adt.id));
-                    }
-                    (_, _, Some(s)) => {
-                        arg_ids.push(TypeID::Prim(s.clone()));
-                    }
-                    _ => {
-                        return Err(NameErr {
-                            message: String::from(format!("type does not exist: {}", arg)),
-                            span: v.span.clone()
-                        })
-                    }
-                };
-
+                arg_ids.push(
+                    check_type_identifier(arg, &params, &type_table, &v.span)?
+                );
             }
 
             type_table.add_value(&v.val.name, &arg_ids, &t.val.name);
-            /*for arg in &v.val.args {
-                if !type_table.has_type(&arg) {
-                    return Err(NameErr {
-                        message: String::from(format!("type does not exist: {}", arg)),
-                        span: v.span.clone()
-                    })
-                }
-            }
-
-            type_table.add_value(&v.val.name, &v.val.args, &t.val.name);*/
         }
     }
 
@@ -891,7 +872,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
                 name: t.val.name.clone(),
                 options: t.val.options.iter().map(|o| { 
                     TypeOptionNode {
-                        val: TypeOption {name: o.val.name.clone(), args: o.val.args.clone() },
+                        val: TypeOption {name: o.val.name.clone(), args: o.val.args.iter().map(|id| {id.name.clone()}).collect() },
                         span: o.span.clone()
                     }
                 }).collect()
@@ -901,4 +882,29 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
     }).collect();
 
     Ok((new_types, type_table))
+}
+
+fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, span: &Span) -> Result<TypeID, NameErr> {
+    let mut args = Vec::new();
+    for arg in &ident.args {
+        args.push(Box::from(check_type_identifier(&**arg, params, type_table, &span)?));
+    }
+
+    match (params.get(&ident.name), type_table.types.get(&ident.name), type_table.primitives.get(&ident.name)) {
+        (Some(tparam_id), _, _) => {
+            Ok(TypeID::TParam(*tparam_id))
+        }
+        (_, Some(adt), _) => {
+            Ok(TypeID::ADT(adt.id, args))
+        }
+        (_, _, Some(s)) => {
+            Ok(TypeID::Prim(s.clone()))
+        }
+        _ => {
+            return Err(NameErr {
+                message: String::from(format!("type does not exist: {}", ident.name)),
+                span: span.clone()
+            });
+        }
+    }
 }

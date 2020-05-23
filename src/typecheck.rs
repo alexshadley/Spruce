@@ -196,7 +196,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
                 na::TypeID::TParam(id) => {
                     Box::from(tparams.get(id).expect("dangling tparam id").clone())
                 }
-                na::TypeID::ADT(id) => {
+                na::TypeID::ADT(id, _) => {
                     Box::from(env.adt_type.get(id).expect("dangling type id").clone())
                 }
                 na::TypeID::Prim(s) => {
@@ -227,6 +227,24 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
     }
 
     Ok(env)
+}
+
+fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<na::TParamID, Type>) -> Type {
+    match ident {
+        na::TypeID::TParam(id) => {
+            tparams.get(id).expect("dangling tparam id").clone()
+        }
+        na::TypeID::ADT(id, args) => {
+            let arg_types: Vec<Box<Type>> = args.iter().map(|arg| {
+                Box::from(create_ident_type(arg, env, tparams))
+            }).collect();
+            //env.adt_type.get(id).expect("dangling type id").clone()
+            Type::ADT(*id, arg_types)
+        }
+        na::TypeID::Prim(s) => {
+            Type::Prim(s.clone())
+        }
+    }
 }
 
 fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeErr> {
@@ -313,7 +331,9 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         _ => unreachable!()
     };
 
-    // we can't let the tvars of the acutal ADT "leak" to the arms
+    // we can't let the tvars of the acutal ADT "leak" to the arms. For reasons
+    // that are not entirely clear to me we don't need to do this when
+    // applying an adt constructor, only here
     let adt_tvar_subs = unify(&adt_type,
         &Type::ADT(*adt_id, adt_args.iter().map(|_| { Box::from(env.new_tvar()) }).collect()),
         &case.span

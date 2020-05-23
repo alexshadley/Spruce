@@ -5,7 +5,9 @@ stmt = _{ ( assign | fn_call | case ) ~ "\n" }
 
 type_decl = { "type" ~ id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
 type_params = { ("(" ~ id ~ ("," ~ id)* ~ ")")? }
-type_option = { id ~ ("(" ~ id ~ ("," ~ id)* ~ ")")? }
+type_option = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
+
+type_id = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
 function_decl = { id ~ fn_args ~ "{\n" ~ body ~ "}" }
 fn_args = { "(" ~ (id ~ ("," ~ id)* )? ~ ")" }

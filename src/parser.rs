@@ -185,7 +185,13 @@ pub struct TypeNode {
 #[derive(Debug, PartialEq)]
 pub struct TypeOption {
     pub name: String,
-    pub args: Vec<String>
+    pub args: Vec<TypeIdentifier>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeIdentifier {
+    pub name: String,
+    pub args: Vec<Box<TypeIdentifier>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -424,7 +430,7 @@ fn to_type_option(option: Pair<Rule>) -> TypeOptionNode {
 
     let mut args = Vec::new();
     for arg in children {
-        args.push(String::from(arg.as_str()));
+        args.push(to_type_identifier(arg));
     }
     let type_option_val = TypeOption {
         name: name,
@@ -434,6 +440,23 @@ fn to_type_option(option: Pair<Rule>) -> TypeOptionNode {
     TypeOptionNode {
         val: type_option_val,
         span: Span::from(option_span)
+    }
+}
+
+fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
+    let ident_span = ident.as_span();
+
+    let mut children = ident.into_inner();
+
+    let name = String::from(children.next().unwrap().as_str());
+
+    let mut args = Vec::new();
+    for arg in children {
+        args.push(Box::from(to_type_identifier(arg)));
+    }
+    TypeIdentifier {
+        name: name,
+        args: args
     }
 }
 
