@@ -547,8 +547,11 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
 
         na::Expr::ADTVal(id, args) => {
-            let (val_arg_types, val_out_type) = match env.val_type.get(&id).expect("dangling type id") {
-                Type::Func(args, out) => (args.clone(), out.clone()),
+            let val_type = env.val_type.get(&id).expect("dangling type id");
+
+
+            let (val_arg_types, val_out_type) = match val_type.clone() { //refresh_tvars(env, val_type.clone()) {
+                Type::Func(args, out) => (args, out),
                 _ => panic!("ADT Value with non-function type")
             };
 
@@ -566,6 +569,35 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
     }
 }
 
+fn refresh_tvars(env: &mut Environment, ty: Type) -> Type {
+    let old_tvars = tvars(&ty);
+    let mut replacements = HashMap::new();
+    for tvar in old_tvars {
+        replacements.insert(tvar, env.new_tvar());
+    }
+
+    refresh_tvars_inner(&replacements, ty)
+}
+
+fn refresh_tvars_inner(replace: &HashMap<TVarID, Type>, ty: Type) -> Type {
+    match &ty {
+        Type::TVar(id) => {
+            replace.get(id).expect("unreachable").clone()
+        }
+        Type::Unit => ty,
+        Type::Prim(_) => ty,
+        Type::ADT(id, params) => {
+            let new_params = params.iter().map(|p| { Box::from(refresh_tvars_inner(replace, (**p).clone())) }).collect();
+
+            Type::ADT(*id, new_params)
+        }
+        Type::Func(args, out) => {
+            let new_args = args.iter().map(|arg| { Box::from(refresh_tvars_inner(replace, (**arg).clone())) }).collect();
+
+            Type::Func(new_args, Box::from(refresh_tvars_inner(replace, (**out).clone())))
+        }
+    }
+}
 
 fn apply(subs: &TSubst, ty: Type) -> Type {
     match &ty {
@@ -685,9 +717,18 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
                 let arg_vars = tvars(arg);
                 vars.extend(arg_vars);
             }
+            vars.extend(tvars(&out));
             vars
         }
     }
+}
+
+#[test]
+fn func_tvars() {
+    let ty = Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(1)));
+    let res = tvars(&ty);
+    assert_eq!(res.contains(&0), true);
+    assert_eq!(res.contains(&1), true);
 }
 
 #[test]

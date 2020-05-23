@@ -7,9 +7,10 @@ id(x) {
     x
 }
 
-map(m, fn) {
-    case m {
+map() {
+    mut x = Just(5)
+    case x {
+        Just(y) -> Just(id(y))
         Nothing -> Nothing
-        Just(x) -> Just(fn(x))
     }
 }
