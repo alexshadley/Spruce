@@ -308,10 +308,19 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     }
 
     let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id").clone();
-    // adding this line fixes nested cases but breaks lots of other things
-    //let adt_type_refreshed = refresh_tvars(env, adt_type);
+    let (adt_id, adt_args) = match &adt_type {
+        Type::ADT(id, args) => (id, args),
+        _ => unreachable!()
+    };
 
-    let pattern_subs = unify(&adt_type, &expr_type, &case.span)?;
+    // we can't let the tvars of the acutal ADT "leak" to the arms
+    let adt_tvar_subs = unify(&adt_type,
+        &Type::ADT(*adt_id, adt_args.iter().map(|_| { Box::from(env.new_tvar()) }).collect()),
+        &case.span
+    ).expect("unreachable");
+    subs.extend(adt_tvar_subs.clone());
+
+    let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.span)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -324,7 +333,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         };
 
         for (arg, ty) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
-            let arg_type: Type = (*ty).clone();
+            let arg_type: Type = apply(&adt_tvar_subs, *ty);
             env.insert_sym_type(*arg, arg_type);
         }
 
@@ -465,7 +474,7 @@ macro_rules! bool_adt {
 
 // TODO: add apply_env everywhere
 fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
-    match &expr.val {
+    let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.span),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
         na::Expr::Div(left, right) | na::Expr::Pow(left, right) => {
@@ -591,7 +600,11 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
 
             Ok(subs)*/
         }
-    }
+    }?;
+
+    println!("Typecheck {:?} and {:?}\nsubs: {:?}\ntype: {:?}\n", expr.val, ty, res, apply(&res, ty.clone()));
+
+    Ok(res)
 }
 
 fn refresh_tvars(env: &mut Environment, ty: Type) -> Type {
@@ -648,7 +661,7 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
 }
 
 fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
-    println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
+    //println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
             if id1 == id2 {
