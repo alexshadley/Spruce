@@ -550,18 +550,19 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             let val_type = env.val_type.get(&id).expect("dangling type id");
 
 
-            let (val_arg_types, val_out_type) = match val_type.clone() { //refresh_tvars(env, val_type.clone()) {
+            let (val_arg_types, val_out_type) = match refresh_tvars(env, val_type.clone()) {
                 Type::Func(args, out) => (args, out),
                 _ => panic!("ADT Value with non-function type")
             };
 
             let mut subs = HashMap::new();
             for (arg, arg_type) in args.iter().zip(val_arg_types) {
-                let arg_subs = typecheck(env, arg, &arg_type)?;
+                //println!("typecheck arg {:?} as {:?}", arg, &apply(&subs, *arg_type.clone()));
+                let arg_subs = typecheck(env, arg, &apply(&subs, *arg_type))?;
                 subs.extend(arg_subs);
             }
 
-            let out_subs = unify(&ty, &apply(&subs, *val_out_type), &expr.span)?;
+            let out_subs = unify(ty, &apply(&subs, *val_out_type), &expr.span)?;
             subs.extend(out_subs);
 
             Ok(subs)
