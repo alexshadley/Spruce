@@ -311,7 +311,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     // adding this line fixes nested cases but breaks lots of other things
     //let adt_type_refreshed = refresh_tvars(env, adt_type);
 
-    let pattern_subs = unify(&expr_type, &adt_type, &case.span)?;
+    let pattern_subs = unify(&adt_type, &expr_type, &case.span)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -549,10 +549,32 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
 
         na::Expr::ADTVal(id, args) => {
+            let mut subs = HashMap::new();
+            let mut arg_types = Vec::new();
+            for arg in args {
+                let arg_tvar = env.new_tvar();
+                let arg_subs = typecheck(env, &*arg, &arg_tvar)?;
+                arg_types.push(Box::from(apply(&arg_subs, arg_tvar)));
+                subs.extend(arg_subs);
+            }
+
+            let out_tvar = env.new_tvar();
+            let out_subs = unify(&ty, &out_tvar, &expr.span)?;
+            let out_type = apply(&out_subs, out_tvar);
+            subs.extend(out_subs);
+
+            let fn_type = Type::Func(arg_types, Box::from(out_type));
+
+            let fn_sym_type = env.val_type.get(&id).expect("dangling val id");
+            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.span)?;
+            subs.extend(fn_subs);
+
+            Ok(subs)
+            /*
             let val_type = env.val_type.get(&id).expect("dangling type id");
 
 
-            let (val_arg_types, val_out_type) = match refresh_tvars(env, val_type.clone()) {
+            let (val_arg_types, val_out_type) = match val_type.clone() {//match refresh_tvars(env, val_type.clone()) {
                 Type::Func(args, out) => (args, out),
                 _ => panic!("ADT Value with non-function type")
             };
@@ -567,7 +589,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             let out_subs = unify(ty, &apply(&subs, *val_out_type), &expr.span)?;
             subs.extend(out_subs);
 
-            Ok(subs)
+            Ok(subs)*/
         }
     }
 }

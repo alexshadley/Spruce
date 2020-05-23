@@ -21,27 +21,22 @@ andThen(fn, m) {
     }
 }
 
-flatten(m) {
-    case m {
-        Just(m2) -> {
-            m2
-        }
-        Nothing -> 0
+bar(m, fn) {
+    case True {
+        True -> Just(fn(m))
+        False -> Nothing
     }
 }
 
-type Tuple(a, b) {
-    Tup(a, b)
-}
-
-fst(t) {
-    case t {
-        Tup(x, y) -> x
+not(b) {
+    case b {
+        True -> False
+        False -> True
     }
 }
 
-snd(t) {
-    case t {
-        Tup(x, y) -> y
-    }
+foo(x, y, fn) {
+    z1 = x + 1
+    z2 = not(y)
+    fn(id(x), id(y))
 }
