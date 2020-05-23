@@ -3,13 +3,13 @@ type Maybe(a) {
     Nothing
 }
 
-map(fn, m) {
-    case m {
-        Just(x) -> Just(fn(x))
-        Nothing -> Nothing
-    }
+id(x) {
+    x
 }
 
-main() {
-    a = 1
+map(m, fn) {
+    case m {
+        Nothing -> Nothing
+        Just(x) -> Just(fn(x))
+    }
 }

@@ -558,7 +558,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
                 subs.extend(arg_subs);
             }
 
-            let out_subs = unify(&ty, &val_out_type, &expr.span)?;
+            let out_subs = unify(&ty, &apply(&subs, *val_out_type), &expr.span)?;
             subs.extend(out_subs);
 
             Ok(subs)
@@ -715,4 +715,28 @@ fn unify_fn() {
         &Span {start: 0, end: 0}
     );
     assert_eq!(res.is_ok(), false);
+}
+
+
+// verify that typecheck(Just(0), Maybe(Bool)) fails
+#[test]
+fn typecheck_adt() {
+    let mut env = Environment::new(0);
+    env.val_type.insert(0, Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))]))));
+    let expr = na::ExprNode {
+        val: na::Expr::ADTVal(0, vec![
+            Box::from(na::ExprNode {
+                val: na::Expr::Lit(0.0),
+                span: Span {start: 0, end: 0}
+            })
+        ]),
+        span: Span {start: 0, end: 0}
+    };
+
+    let res = typecheck(
+        &mut env,
+        &expr,
+        &Type::ADT(1, vec![Box::from(Type::ADT(0, vec![]))]),
+    );
+    assert_eq!(res.is_err(), true);
 }
