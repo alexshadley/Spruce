@@ -326,7 +326,6 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     // that are not entirely clear to me we don't need to do this when
     // applying an adt constructor, only here
     let adt_tvar_subs = refresh_tvars(env, &adt_type);
-    //subs.extend(adt_tvar_subs.clone());
 
     let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.span)?;
     env.apply_subs(&pattern_subs);

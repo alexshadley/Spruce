@@ -88,5 +88,5 @@ main() {
     dict := insert(dict, 4, Just(2))
     dict := insert(dict, 5, Nothing)
 
-    flatten(get(dict, 9))
+    withDefault(flatten(get(dict, 9)), 0)
 }
