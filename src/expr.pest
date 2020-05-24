@@ -39,12 +39,13 @@ empty_line = _{ "\n" }
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
 
-operation = _{ add | subtract | multiply | divide | power | eq | not_eq | lt_eq | gt_eq | lt | gt }
+operation = _{ add | subtract | multiply | divide | power | modulus | eq | not_eq | lt_eq | gt_eq | lt | gt }
     add      = { "+" }
     subtract = { "-" }
     multiply = { "*" }
     divide   = { "/" }
     power    = { "^" }
+    modulus  = { "%" }
     eq       = { "==" }
     not_eq   = { "!=" }
     lt_eq    = { "<=" }

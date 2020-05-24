@@ -19,6 +19,7 @@ lazy_static! {
         PrecClimber::new(vec![
             Operator::new(eq, Left) | Operator::new(not_eq, Left),
             Operator::new(lt_eq, Left) | Operator::new(gt_eq, Left) | Operator::new(lt, Left) | Operator::new(gt, Left),
+            Operator::new(modulus, Left),
             Operator::new(add, Left) | Operator::new(subtract, Left),
             Operator::new(multiply, Left) | Operator::new(divide, Left),
             Operator::new(power, Right),
@@ -51,6 +52,7 @@ pub enum Expr {
     Subt(Box<ExprNode>, Box<ExprNode>),
     Div(Box<ExprNode>, Box<ExprNode>),
     Pow(Box<ExprNode>, Box<ExprNode>),
+    Mod(Box<ExprNode>, Box<ExprNode>),
     FnCall(String, Vec<Box<ExprNode>>),
     Id(String),
     Lit(f64),
@@ -245,6 +247,7 @@ fn to_expr(expr: Pair<Rule>) -> ExprNode {
                 Rule::multiply => Expr::Mult(Box::from(lhs), Box::from(rhs)),
                 Rule::divide   => Expr::Div(Box::from(lhs), Box::from(rhs)),
                 Rule::power    => Expr::Pow(Box::from(lhs), Box::from(rhs)),
+                Rule::modulus  => Expr::Mod(Box::from(lhs), Box::from(rhs)),
                 Rule::eq       => Expr::Eq(Box::from(lhs), Box::from(rhs)),
                 Rule::not_eq   => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
                 Rule::lt_eq    => Expr::LtEq(Box::from(lhs), Box::from(rhs)),

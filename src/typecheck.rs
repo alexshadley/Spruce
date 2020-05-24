@@ -485,7 +485,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
     let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.span),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
-        na::Expr::Div(left, right) | na::Expr::Pow(left, right) => {
+        na::Expr::Div(left, right) | na::Expr::Pow(left, right) | na::Expr::Mod(left, right) => {
             let mut subs = unify(ty, &int_prim!(), &expr.span)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;

@@ -20,6 +20,8 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog) {
     for func in &prog.functions {
         write!(out, "{}", gen_func(prog, func, 0)).expect("failed to write line");
     }
+
+    write!(out, "\nconsole.log(main())").expect("failed to write line");
 }
 
 fn gen_type(prog: &Prog, t: &TypeNode) -> String {
@@ -168,8 +170,9 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
         Expr::Add(left, right) => format!("({} + {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Subt(left, right) => format!("({} - {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Mult(left, right) => format!("({} * {})", gen_expr(prog, left), gen_expr(prog, right)),
-        Expr::Div(left, right) => format!("({} / {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::Div(left, right) => format!("(~~({} / {}))", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Pow(left, right) => unimplemented!(),
+        Expr::Mod(left, right) => format!("({} % {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Eq(left, right) => format!("_to_bool({} == {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::NotEq(left, right) => format!("_to_bool({} != {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::LtEq(left, right) => format!("_to_bool({} <= {})", gen_expr(prog, left), gen_expr(prog, right)),

@@ -37,6 +37,7 @@ pub enum Expr {
     Subt(Box<ExprNode>, Box<ExprNode>),
     Div(Box<ExprNode>, Box<ExprNode>),
     Pow(Box<ExprNode>, Box<ExprNode>),
+    Mod(Box<ExprNode>, Box<ExprNode>),
     FnCall(SymbolID, Vec<Box<ExprNode>>),
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<ExprNode>>),
@@ -625,6 +626,11 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
             let left = check_expr(table, types, &*l)?;
             let right = check_expr(table, types, &*r)?;
             Ok(Expr::Pow(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Mod(l, r) => {
+            let left = check_expr(table, types, &*l)?;
+            let right = check_expr(table, types, &*r)?;
+            Ok(Expr::Mod(Box::from(left), Box::from(right)))
         }
         parser::Expr::Eq(l, r) => {
             let left = check_expr(table, types, &*l)?;
