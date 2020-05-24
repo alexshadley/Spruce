@@ -325,14 +325,8 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     // we can't let the tvars of the acutal ADT "leak" to the arms. For reasons
     // that are not entirely clear to me we don't need to do this when
     // applying an adt constructor, only here
-    /*let adt_tvar_subs = unify(&adt_type,
-        &Type::ADT(*adt_id, adt_args.iter().map(|_| { Box::from(env.new_tvar()) }).collect()),
-        &case.span
-    ).expect("unreachable");*/
-
-    println!("adt type: {:?}", adt_type);
     let adt_tvar_subs = refresh_tvars(env, &adt_type);
-    subs.extend(adt_tvar_subs.clone());
+    //subs.extend(adt_tvar_subs.clone());
 
     let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.span)?;
     env.apply_subs(&pattern_subs);
@@ -347,9 +341,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         };
 
         for (arg, pat_arg_type) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
-            println!("incoming arg type {:?}", pat_arg_type);
             let arg_type: Type = apply(&adt_tvar_subs, *pat_arg_type);
-            println!("inserting {:?} as {:?}", arg, arg_type);
             env.insert_sym_type(*arg, arg_type);
         }
 
@@ -490,6 +482,7 @@ macro_rules! bool_adt {
 
 // TODO: add apply_env everywhere
 fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
+    println!("Typecheck {:?} and {:?}", expr.val, ty);
     let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.span),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
@@ -618,7 +611,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
     }?;
 
-    println!("Typecheck {:?} and {:?}\nsubs: {:?}\ntype: {:?}\n", expr.val, ty, res, apply(&res, ty.clone()));
+    println!("subs: {:?}\ntype: {:?}\n", res, apply(&res, ty.clone()));
 
     Ok(res)
 }
