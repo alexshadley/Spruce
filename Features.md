@@ -7,7 +7,7 @@ exists to coordinate the work of building new features.
 
 | Type | Status |
 |------|--------|
-| Bool | |
+| Bool | :heavy_check_mark: |
 | Int | :heavy_check_mark: |
 | Float| |
 | Char | |
@@ -25,7 +25,8 @@ Char, as is done in Haskell.
 
 | Feature | Status |
 |---------|--------|
-| Lists | |
+| Lists | :heavy_check_mark: |
+| JS-backed Lists | |
 | List Indexing (Python-style) | |
 | List Comprehension | |
 | List Iteration (for loop) | |
@@ -74,11 +75,19 @@ tested yet, and may break in some edge cases.
 | Feature | Status |
 |---------|--------|
 | ADT | :heavy_check_mark: |
-| Type Parameters | |
+| Type Parameters | :heavy_check_mark: |
+| Arbitrary ADT Constructor Types | |
 
-ADTs are implemented, but not with type parameters, so essentially ADTs are
-restricted to one type. Without a type checker that's not really a
-restriction, but in the future this will be an issue.
+ADTs have been a huge priority in developing Spruce, since once we have good
+ADTs we get a bunch of features for free. For instance, Booleans are
+implemented in Spruce as adts, and case statements can function as ifs no
+problem! That's not to say we won't want if statements eventually, but for now
+this is a great stop-gap.
+
+ADTs also let us make pretty much any data structure we want: lists, maps,
+trees, etc. as long as we don't care about performance. "Don't care about
+performance" _is_ a pretty big caveat, admittedly, so for key data structures
+we should probably use the js equivalents under the hood.
 
 ## Pattern Matching
 
