@@ -8,29 +8,19 @@ type List(a) {
     Nil
 }
 
+type CoolType(a) {
+    Big(List(a))
+    Small(Maybe(a))
+}
 
-foo(f, g, h, v) {
-    val = h(Just(g(f(v))))
-
-    case val {
-        Just(x) -> Just(x)
-        Nothing -> Nothing
+coolFn(cool) {
+    case cool {
+        Big(l) -> {
+            case l {
+                Cons(x, r) -> Just(x)
+                Nil -> Nothing
+            }
+        }
+        Small(m) -> m
     }
-}
-
-map(ls, fn) {
-    case ls {
-        Cons(x, l) -> Cons(fn(x), map(l, fn))
-        Nil -> Nil
-    }
-}
-
-wrap(v) {
-    ret = Cons(v, Nil)
-    ret
-}
-
-main() {
-    l1 = Cons(1, Cons(2, Cons(3, Nil)))
-    l2 = map(l1, wrap)
 }

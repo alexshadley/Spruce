@@ -192,17 +192,8 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
 
     for (_, val) in &prog.type_table.values {
         let args = val.args.iter().map(|arg| {
-            match arg {
-                na::TypeID::TParam(id) => {
-                    Box::from(tparams.get(id).expect("dangling tparam id").clone())
-                }
-                na::TypeID::ADT(id, _) => {
-                    Box::from(env.adt_type.get(id).expect("dangling type id").clone())
-                }
-                na::TypeID::Prim(s) => {
-                    Box::from(Type::Prim(s.clone()))
-                }
-            }
+            let arg_type = create_ident_type(arg, &mut env, &tparams);
+            Box::from(arg_type)
         }).collect();
         let out = env.adt_type.get(&val.data_type).expect("dangling adt id");
 
@@ -334,10 +325,13 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     // we can't let the tvars of the acutal ADT "leak" to the arms. For reasons
     // that are not entirely clear to me we don't need to do this when
     // applying an adt constructor, only here
-    let adt_tvar_subs = unify(&adt_type,
+    /*let adt_tvar_subs = unify(&adt_type,
         &Type::ADT(*adt_id, adt_args.iter().map(|_| { Box::from(env.new_tvar()) }).collect()),
         &case.span
-    ).expect("unreachable");
+    ).expect("unreachable");*/
+
+    println!("adt type: {:?}", adt_type);
+    let adt_tvar_subs = refresh_tvars(env, &adt_type);
     subs.extend(adt_tvar_subs.clone());
 
     let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.span)?;
@@ -352,8 +346,10 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
             _ => unreachable!()
         };
 
-        for (arg, ty) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
-            let arg_type: Type = apply(&adt_tvar_subs, *ty);
+        for (arg, pat_arg_type) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
+            println!("incoming arg type {:?}", pat_arg_type);
+            let arg_type: Type = apply(&adt_tvar_subs, *pat_arg_type);
+            println!("inserting {:?} as {:?}", arg, arg_type);
             env.insert_sym_type(*arg, arg_type);
         }
 
@@ -627,17 +623,17 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
     Ok(res)
 }
 
-fn refresh_tvars(env: &mut Environment, ty: Type) -> Type {
-    let old_tvars = tvars(&ty);
+fn refresh_tvars(env: &mut Environment, ty: &Type) -> TSubst {
+    let old_tvars = tvars(ty);
     let mut replacements = HashMap::new();
     for tvar in old_tvars {
         replacements.insert(tvar, env.new_tvar());
     }
 
-    refresh_tvars_inner(&replacements, ty)
+    replacements
 }
 
-fn refresh_tvars_inner(replace: &HashMap<TVarID, Type>, ty: Type) -> Type {
+/*fn refresh_tvars_inner(replace: &HashMap<TVarID, Type>, ty: Type) -> Type {
     match &ty {
         Type::TVar(id) => {
             replace.get(id).expect("unreachable").clone()
@@ -655,7 +651,7 @@ fn refresh_tvars_inner(replace: &HashMap<TVarID, Type>, ty: Type) -> Type {
             Type::Func(new_args, Box::from(refresh_tvars_inner(replace, (**out).clone())))
         }
     }
-}
+}*/
 
 fn apply(subs: &TSubst, ty: Type) -> Type {
     match &ty {
