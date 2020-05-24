@@ -3,13 +3,6 @@ type Maybe(a) {
     Nothing
 }
 
-isJust(m) {
-    case m {
-        Just(v) -> True
-        Nothing -> False
-    }
-}
-
 type List(a) {
     Cons(a, List(a))
     Nil
@@ -61,6 +54,6 @@ isFactor(x, y) {
 }
 
 main() {
-    nums = range(3, 10000)
+    nums = range(3, 1000)
     filter(nums, isPrime)
 }

@@ -36,6 +36,72 @@ Some of the things I want to see in Spruce:
   error messages I've ever seen. Good compiler messages can save trips to stack
   overflow, which is a huge productivity (and quality of life) improvement.
 
+### What does it look like?
+
+The following program computes primes below 1000:
+
+```
+type Maybe(a) {
+    Just(a)
+    Nothing
+}
+
+type List(a) {
+    Cons(a, List(a))
+    Nil
+}
+
+filter(ls, fn) {
+    case ls {
+        Cons(v, rest) -> {
+            case fn(v) {
+                True -> Cons(v, filter(rest, fn))
+                False -> filter(rest, fn)
+            }
+        }
+        Nil -> Nil
+    }
+}
+
+filter2(ls, fn, firstArg) {
+    case ls {
+        Cons(v, rest) -> {
+            case fn(firstArg, v) {
+                True -> Cons(v, filter2(rest, fn, firstArg))
+                False -> filter2(rest, fn, firstArg)
+            }
+        }
+        Nil -> Nil
+    }
+}
+
+range(start, end) {
+    case start < end {
+        True -> Cons(start, range(start + 1, end))
+        False -> Nil
+    }
+}
+
+isPrime(n) {
+    checkFactors = range(2, n)
+    factors = filter2(checkFactors, isFactor, n)
+
+    case factors {
+        Cons(val, rest) -> False
+        Nil -> True
+    }
+}
+
+isFactor(x, y) {
+    x % y == 0
+}
+
+main() {
+    nums = range(3, 1000)
+    filter(nums, isPrime)
+}
+```
+
 ### Why?
 
 I'm a bored college graduate with time on his hands and a slight background in
