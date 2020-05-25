@@ -119,18 +119,18 @@ pub struct Environment {
     val_type: HashMap<na::ADTValID, Type>,
 
     // prelude adts are used internally, so we need to record their type ids
-    bool_id: na::ADTID
+    internal_types: na::InternalTypes
 }
 
 impl Environment {
-    fn new(bool_id: na::ADTID) -> Self {
+    fn new(internal_types: na::InternalTypes) -> Self {
         Environment {
             next_type_var: 0,
             complete_sym_type: HashMap::new(), 
             active_sym_type: HashMap::new(), 
             val_type: HashMap::new(), 
             adt_type: HashMap::new(),
-            bool_id: bool_id
+            internal_types: internal_types
         }
     }
 
@@ -176,7 +176,7 @@ impl Environment {
 type TSubst = HashMap<TVarID, Type>;
 
 pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
-    let mut env = Environment::new(prog.bool_id);
+    let mut env = Environment::new(prog.internal_types.clone());
 
     let mut tparams: HashMap<na::TParamID, Type> = HashMap::new();
     let mut adts: HashMap<na::ADTID, Type> = HashMap::new();
@@ -476,7 +476,7 @@ macro_rules! int_prim {
 
 macro_rules! bool_adt {
     ($e:ident) => {
-        Type::ADT($e.bool_id, vec![])
+        Type::ADT($e.internal_types.bool_id, vec![])
     };
 }
 
@@ -815,8 +815,9 @@ fn unify_fn() {
 #[test]
 fn typecheck_adt() {
     let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+    let test_it = na::InternalTypes {bool_id: 0, maybe_id: 1, list_id: 2, cons_id: 0, nil_id: 1};
 
-    let mut env = Environment::new(0);
+    let mut env = Environment::new(test_it);
     env.val_type.insert(0, Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))]))));
     let expr = na::ExprNode {
         val: na::Expr::ADTVal(0, vec![

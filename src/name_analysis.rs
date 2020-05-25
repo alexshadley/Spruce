@@ -207,6 +207,17 @@ pub struct FuncNode {
     pub info: NodeInfo
 }
 
+// exists to record types of adts and values we need in codegen
+#[derive(Debug, PartialEq, Clone)]
+pub struct InternalTypes {
+    pub bool_id: ADTID,
+    pub maybe_id: ADTID,
+
+    pub list_id: ADTID,
+    pub cons_id: ADTValID,
+    pub nil_id: ADTValID
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Prog {
     pub functions: Vec<FuncNode>,
@@ -214,8 +225,7 @@ pub struct Prog {
     pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
     pub type_table: TypeTableExt,
-
-    pub bool_id: ADTID
+    pub internal_types: InternalTypes
 }
 
 
@@ -235,8 +245,22 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, NameErr> {
     
     sym_table.pop_layer();
 
-    let bool_id = type_table.get_type(&String::from("Bool")).expect("Could not find Bool id").id;
-    let out_prog = Prog {functions: funcs, definitions: defs, types: types, symbol_table: sym_table, type_table: type_table.to_ext(), bool_id: bool_id};
+    let internal_types = InternalTypes {
+        bool_id: type_table.get_type(&String::from("Bool")).expect("Could not find Bool id").id,
+        maybe_id: type_table.get_type(&String::from("Maybe")).expect("Could not find Maybe id").id,
+        list_id: type_table.get_type(&String::from("List")).expect("Could not find List id").id,
+        cons_id: type_table.get_value(&String::from("Cons")).expect("Could not find Cons id").id,
+        nil_id: type_table.get_value(&String::from("Nil")).expect("Could not find Nil id").id,
+    };
+
+    let out_prog = Prog {
+        functions: funcs, 
+        definitions: defs,
+        types: types,
+        symbol_table: sym_table,
+        type_table: type_table.to_ext(),
+        internal_types: internal_types
+    };
     Ok(out_prog)
 }
 
@@ -756,7 +780,7 @@ pub struct TypeTableExt {
 impl TypeTable {
     fn new() -> Self {
         // TODO: figure out the proper way to do this in rust
-        let primitives = vec![String::from("Int"), String::from("Float")];
+        let primitives = vec![String::from("Int"), String::from("Float"), String::from("Char")];
 
         TypeTable {
             next_type_id: 0,
