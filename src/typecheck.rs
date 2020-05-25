@@ -588,26 +588,6 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             subs.extend(fn_subs);
 
             Ok(subs)
-            /*
-            let val_type = env.val_type.get(&id).expect("dangling type id");
-
-
-            let (val_arg_types, val_out_type) = match val_type.clone() {//match refresh_tvars(env, val_type.clone()) {
-                Type::Func(args, out) => (args, out),
-                _ => panic!("ADT Value with non-function type")
-            };
-
-            let mut subs = HashMap::new();
-            for (arg, arg_type) in args.iter().zip(val_arg_types) {
-                //println!("typecheck arg {:?} as {:?}", arg, &apply(&subs, *arg_type.clone()));
-                let arg_subs = typecheck(env, arg, &apply(&subs, *arg_type))?;
-                subs.extend(arg_subs);
-            }
-
-            let out_subs = unify(ty, &apply(&subs, *val_out_type), &expr.info)?;
-            subs.extend(out_subs);
-
-            Ok(subs)*/
         }
     }?;
 
@@ -625,26 +605,6 @@ fn refresh_tvars(env: &mut Environment, ty: &Type) -> TSubst {
 
     replacements
 }
-
-/*fn refresh_tvars_inner(replace: &HashMap<TVarID, Type>, ty: Type) -> Type {
-    match &ty {
-        Type::TVar(id) => {
-            replace.get(id).expect("unreachable").clone()
-        }
-        Type::Unit => ty,
-        Type::Prim(_) => ty,
-        Type::ADT(id, params) => {
-            let new_params = params.iter().map(|p| { Box::from(refresh_tvars_inner(replace, (**p).clone())) }).collect();
-
-            Type::ADT(*id, new_params)
-        }
-        Type::Func(args, out) => {
-            let new_args = args.iter().map(|arg| { Box::from(refresh_tvars_inner(replace, (**arg).clone())) }).collect();
-
-            Type::Func(new_args, Box::from(refresh_tvars_inner(replace, (**out).clone())))
-        }
-    }
-}*/
 
 fn apply(subs: &TSubst, ty: Type) -> Type {
     match &ty {

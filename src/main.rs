@@ -15,7 +15,7 @@ mod codegen;
 
 fn main() {
     let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let unparsed_file = fs::read_to_string("src/samples/primes.sp").expect("cannot read file");
+    let unparsed_file = fs::read_to_string("src/samples/lists.sp").expect("cannot read file");
     let files = vec![(prelude.as_str(), String::from("prelude")), (unparsed_file.as_str(), String::from("main"))];
 
     let prog = parser::parse(files.clone()).expect("Parse failed");
