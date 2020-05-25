@@ -13,20 +13,20 @@ use std::iter::FromIterator;
 use crate::error::{NameErr};
 
 use crate::parser;
-use crate::parser::{Span};
+use crate::parser::{NodeInfo};
 
 
-fn double_decl(name: &String, span: Span) -> NameErr {
+fn double_decl(name: &String, info: NodeInfo) -> NameErr {
     NameErr{
         message: String::from(format!("'{}' declared twice", name)),
-        span: span
+        info: info
     }
 }
 
-fn undeclared(name: &String, span: Span) -> NameErr {
+fn undeclared(name: &String, info: NodeInfo) -> NameErr {
     NameErr{
         message: String::from(format!("'{}' used but not declared", name)),
-        span: span
+        info: info
     }
 }
 
@@ -53,7 +53,7 @@ pub enum Expr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct ExprNode {
     pub val: Expr,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -65,7 +65,7 @@ pub struct Body {
 #[derive(Debug, PartialEq)]
 pub struct BodyNode {
     pub val: Body,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -78,7 +78,7 @@ pub struct Case {
 #[derive(Debug, PartialEq)]
 pub struct CaseNode {
     pub val: Case,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -90,7 +90,7 @@ pub struct CasePattern {
 #[derive(Debug, PartialEq)]
 pub struct CasePatternNode {
     pub val: CasePattern,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -102,7 +102,7 @@ pub struct CaseOption {
 #[derive(Debug, PartialEq)]
 pub struct CaseOptionNode {
     pub val: CaseOption,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -114,7 +114,7 @@ pub enum CaseBody {
 #[derive(Debug, PartialEq)]
 pub struct CaseBodyNode {
     pub val: CaseBody,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -126,7 +126,7 @@ pub enum Valued {
 #[derive(Debug, PartialEq)]
 pub struct ValuedNode {
     pub val: Valued,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -139,7 +139,7 @@ pub enum Stmt {
 #[derive(Debug, PartialEq)]
 pub struct StmtNode {
     pub val: Stmt,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -161,7 +161,7 @@ impl Target {
 #[derive(Debug, PartialEq)]
 pub struct TargetNode {
     pub val: Target,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -173,7 +173,7 @@ pub struct Type {
 #[derive(Debug, PartialEq)]
 pub struct TypeNode {
     pub val: Type,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -191,7 +191,7 @@ pub struct TypeIdentifier {
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -204,7 +204,7 @@ pub struct Func {
 #[derive(Debug, PartialEq)]
 pub struct FuncNode {
     pub val: Func,
-    pub span: Span
+    pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
@@ -344,7 +344,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
     let mut fn_ids = Vec::new();
     for func in &prog.functions {
         if table.conflicts(&func.val.name) {
-            return Err(double_decl(&func.val.name, func.span.clone()));
+            return Err(double_decl(&func.val.name, func.info.clone()));
         }
         let id = table.attempt_insert(&func.val.name, SymbolType::Function).expect("unreachable");
         fn_ids.push(id);
@@ -357,14 +357,14 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
                 match &tgt.val {
                     parser::Target::Var(name) => {
                         if table.conflicts(name) {
-                            return Err(double_decl(name, tgt.span.clone()));
+                            return Err(double_decl(name, tgt.info.clone()));
                         }
                         let id = table.attempt_insert(name, SymbolType::Const).expect("unreachable");
                         Target::Var(id)
                     }
                     parser::Target::Mutable(name) => {
                         if table.conflicts(name) {
-                            return Err(double_decl(name, tgt.span.clone()));
+                            return Err(double_decl(name, tgt.info.clone()));
                         }
                         let id = table.attempt_insert(name, SymbolType::Mutable).expect("unreachable");
                         Target::Mutable(id)
@@ -372,7 +372,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
                     parser::Target::Update(_) => {
                         return Err(NameErr {
                             message: String::from(format!("Updates not allowed in program level-statements")),
-                            span: var.span.clone()
+                            info: var.info.clone()
                         });
                     }
                 }
@@ -382,7 +382,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
 
         tgts.push(TargetNode {
             val: tgt_val,
-            span: var.span.clone()
+            info: var.info.clone()
         });
     }
     
@@ -396,7 +396,7 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
 
             Ok(StmtNode {
                 val: Stmt::Assign(tgt, new_expr),
-                span: stmt.span.clone()
+                info: stmt.info.clone()
             })
         }
         _ => unreachable!()
@@ -414,7 +414,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
             }
             None => {
                 // TODO: implement variable shadowing with arguments
-                return Err(double_decl(arg, func.span.clone()));
+                return Err(double_decl(arg, func.info.clone()));
             }
         }
     }
@@ -425,7 +425,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
 
     Ok(FuncNode {
         val: Func {name: id, args: arg_symbols, body: body},
-        span: func.span.clone()
+        info: func.info.clone()
     })
 }
 
@@ -442,7 +442,7 @@ fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNod
 
     Ok(BodyNode {
         val: Body {stmts: stmts, expr: expr},
-        span: body.span.clone()
+        info: body.info.clone()
     })
 }
 
@@ -466,7 +466,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
 
             Stmt::Case(CaseNode {
                 val: Case {id: id, expr: expr, options: options},
-                span: case.span.clone()
+                info: case.info.clone()
             })
         }
         parser::Stmt::FnCall(name, args) => {
@@ -481,7 +481,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
                     Stmt::FnCall(sym.id, checked_args)
                 }
                 None => {
-                    return Err(undeclared(name, stmt.span.clone()));
+                    return Err(undeclared(name, stmt.info.clone()));
                 }
             }
         }
@@ -489,7 +489,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
 
     Ok(StmtNode {
         val: stmt_val,
-        span: stmt.span.clone()
+        info: stmt.info.clone()
     })
 }
 
@@ -502,13 +502,13 @@ fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::C
     };
     let body = CaseBodyNode {
         val: body_val,
-        span: opt.val.body.span.clone()
+        info: opt.val.body.info.clone()
     };
     table.pop_layer();
 
     Ok(CaseOptionNode {
         val: CaseOption {pattern: pattern, body: body },
-        span: opt.span.clone()
+        info: opt.info.clone()
     })
 }
 
@@ -520,7 +520,7 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
         None => {
             return Err(NameErr {
                 message: String::from(format!("'{}' is not an ADT value", pattern.val.base)),
-                span: pattern.span.clone()
+                info: pattern.info.clone()
             });
         }
     };
@@ -533,7 +533,7 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
             }
             None => {
                 // TODO: implement variable shadowing with arguments
-                return Err(double_decl(arg, pattern.span.clone()));
+                return Err(double_decl(arg, pattern.info.clone()));
             }
         }
     }
@@ -541,7 +541,7 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
 
     Ok(CasePatternNode {
         val: CasePattern {base: id, args: arg_symbols},
-        span: pattern.span.clone()
+        info: pattern.info.clone()
     })
 }
 
@@ -552,7 +552,7 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
             match id_result {
                 Some(id) => Ok(Target::Var(id)),
                 None => {
-                    Err(double_decl(name, tgt.span.clone()))
+                    Err(double_decl(name, tgt.info.clone()))
                 }
             }
         }
@@ -560,7 +560,7 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
             let id_result = table.attempt_insert(&name, SymbolType::Mutable);
             match id_result {
                 Some(id) => Ok(Target::Mutable(id)),
-                None => Err(double_decl(name, tgt.span.clone()))
+                None => Err(double_decl(name, tgt.info.clone()))
 
             }
         }
@@ -572,13 +572,13 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
                         SymbolType::Mutable => Ok(Target::Update(sym.id)),
                         _ => Err(NameErr {
                             message: String::from(format!("attempt to update non-mutable '{}'", name)),
-                            span: tgt.span.clone()
+                            info: tgt.info.clone()
                         })
                     }
                 }
                 None => Err(NameErr {
                     message: String::from(format!("'{}' not declared before attempting update", name)),
-                    span: tgt.span.clone()
+                    info: tgt.info.clone()
                 })
             }
         }
@@ -586,7 +586,7 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
 
     Ok(TargetNode {
         val: tgt_val,
-        span: tgt.span.clone()
+        info: tgt.info.clone()
     })
 }
 
@@ -596,7 +596,7 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
             match (table.lookup(&name), types.get_value(&name)) {
                 (Some(sym), _) => Ok(Expr::Id(sym.id)),
                 (_, Some(val)) => Ok(Expr::ADTVal(val.id, vec![])),
-                (None, None) => Err(undeclared(name, expr.span.clone()))
+                (None, None) => Err(undeclared(name, expr.info.clone()))
             }
         }
 
@@ -687,7 +687,7 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
                 }
 
                 (None, None) => {
-                    return Err(undeclared(fn_name, expr.span.clone()));
+                    return Err(undeclared(fn_name, expr.info.clone()));
                 }
             }
         }
@@ -697,7 +697,7 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
 
     Ok(ExprNode {
         val: expr_val,
-        span: expr.span.clone()
+        info: expr.info.clone()
     })
 }
 
@@ -831,13 +831,13 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
 
     for t in &prog.types {
         if type_table.has_type(&t.val.name) {
-            return Err(double_decl(&t.val.name, t.span.clone()))
+            return Err(double_decl(&t.val.name, t.info.clone()))
         }
 
         if !t.val.name.chars().next().unwrap().is_uppercase() {
             return Err(NameErr {
                 message: String::from(format!("{} is an invalid type name: types must be uppercase", t.val.name)),
-                span: t.span.clone()
+                info: t.info.clone()
             });
         }
 
@@ -858,13 +858,13 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
 
         for v in &t.val.options {
             if type_table.has_value(&v.val.name) {
-                return Err(double_decl(&v.val.name, v.span.clone()))
+                return Err(double_decl(&v.val.name, v.info.clone()))
             }
 
             let mut arg_ids = Vec::new();
             for arg in &v.val.args {
                 arg_ids.push(
-                    check_type_identifier(arg, &params, &type_table, &v.span)?
+                    check_type_identifier(arg, &params, &type_table, &v.info)?
                 );
             }
 
@@ -879,21 +879,21 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
                 options: t.val.options.iter().map(|o| { 
                     TypeOptionNode {
                         val: TypeOption {name: o.val.name.clone(), args: o.val.args.iter().map(|id| {id.name.clone()}).collect() },
-                        span: o.span.clone()
+                        info: o.info.clone()
                     }
                 }).collect()
             },
-            span: t.span.clone()
+            info: t.info.clone()
         }
     }).collect();
 
     Ok((new_types, type_table))
 }
 
-fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, span: &Span) -> Result<TypeID, NameErr> {
+fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, NameErr> {
     let mut args = Vec::new();
     for arg in &ident.args {
-        args.push(Box::from(check_type_identifier(&**arg, params, type_table, &span)?));
+        args.push(Box::from(check_type_identifier(&**arg, params, type_table, &info)?));
     }
 
     match (params.get(&ident.name), type_table.types.get(&ident.name), type_table.primitives.get(&ident.name)) {
@@ -909,7 +909,7 @@ fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String
         _ => {
             return Err(NameErr {
                 message: String::from(format!("type does not exist: {}", ident.name)),
-                span: span.clone()
+                info: info.clone()
             });
         }
     }

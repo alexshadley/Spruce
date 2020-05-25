@@ -4,7 +4,8 @@ use std::iter::FromIterator;
 
 use crate::error::TypeErr;
 use crate::name_analysis as na;
-use crate::parser::Span;
+use crate::parser;
+use crate::parser::{NodeInfo, Span};
 
 type TVarID = u32;
 
@@ -256,14 +257,14 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
     // earlier typecheck if it appeared in a function call
     match env.get_sym_type(&func.val.name) {
         Some(env_fn_type) => {
-            match unify(env_fn_type, &refined_fn_type, &func.span) {
+            match unify(env_fn_type, &refined_fn_type, &func.info) {
                 Ok(subs) => {
                     env.apply_subs(&subs);
                 }
                 Err(type_err) => {
                     return Err(TypeErr {
                         message: String::from("Function definiton incompatible with earlier function call"),
-                        span: type_err.span.clone()
+                        info: type_err.info.clone()
                     })
                 }
             };
@@ -309,7 +310,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
                 if pat_type_id != *opt_pat_type_id {
                     return Err(TypeErr {
                         message: format!("case statement has patterns of both types {} and {}", pat_type_id, opt_pat_type_id),
-                        span: opt.val.pattern.span.clone()
+                        info: opt.val.pattern.info.clone()
                     })
                 }
             }
@@ -327,7 +328,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     // applying an adt constructor, only here
     let adt_tvar_subs = refresh_tvars(env, &adt_type);
 
-    let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.span)?;
+    let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.info)?;
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
 
@@ -353,7 +354,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
                 env.apply_subs(&opt_subs);
                 subs.extend(opt_subs);
 
-                match unify(&apply(&subs, (*ty).clone()), &opt_type, &body.span) {
+                match unify(&apply(&subs, (*ty).clone()), &opt_type, &body.info) {
                     Ok(uni_subs) => {
                         env.apply_subs(&uni_subs);
                         subs.extend(uni_subs);
@@ -377,11 +378,11 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         if has_expr {
             return Err(TypeErr {
                 message: String::from("Case with expr must have type"),
-                span: case.span.clone()
+                info: case.info.clone()
             });
         }
         else {
-            let unit_subs = unify(ty, &Type::Unit, &case.span).expect("unreachable");
+            let unit_subs = unify(ty, &Type::Unit, &case.info).expect("unreachable");
             subs.extend(unit_subs);
         }
     }
@@ -434,7 +435,7 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
                 let cloned_args = args.iter().map(|arg| { Box::from(arg.clone()) }).collect();
                 let fn_expr = na::ExprNode {
                     val: na::Expr::FnCall(id.clone(), cloned_args),
-                    span: stmt.span.clone()
+                    info: stmt.info.clone()
                 };
 
                 let new_tvar = env.new_tvar();
@@ -457,7 +458,7 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
         }
         None => {
             let last_stmt_type = stmt_types.last().expect("unreachable");
-            let stmt_subs = unify(last_stmt_type, ty, &body.span).expect("unreachable");
+            let stmt_subs = unify(last_stmt_type, ty, &body.info).expect("unreachable");
 
             env.apply_subs(&stmt_subs);
             subs.extend(stmt_subs);
@@ -483,10 +484,10 @@ macro_rules! bool_adt {
 fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
     println!("Typecheck {:?} and {:?}", expr.val, ty);
     let res = match &expr.val {
-        na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.span),
+        na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.info),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
         na::Expr::Div(left, right) | na::Expr::Pow(left, right) | na::Expr::Mod(left, right) => {
-            let mut subs = unify(ty, &int_prim!(), &expr.span)?;
+            let mut subs = unify(ty, &int_prim!(), &expr.info)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
             let subs2 = typecheck(env, &*right, &int_prim!())?;
@@ -495,7 +496,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             Ok(subs)
         }
         na::Expr::Eq(left, right) | na::Expr::NotEq(left, right) => {
-            let mut subs = unify(ty, &bool_adt!(env), &expr.span)?;
+            let mut subs = unify(ty, &bool_adt!(env), &expr.info)?;
 
             let new_tvar = env.new_tvar();
             let subs1 = typecheck(env, &*left, &new_tvar)?;
@@ -509,7 +510,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         }
         na::Expr::LtEq(left, right) | na::Expr::GtEq(left, right) | na::Expr::Lt(left, right) |
         na::Expr::Gt(left, right) => {
-            let mut subs = unify(ty, &bool_adt!(env), &expr.span)?;
+            let mut subs = unify(ty, &bool_adt!(env), &expr.info)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
             let subs2 = typecheck(env, &*right, &int_prim!())?;
@@ -521,7 +522,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
         na::Expr::Id(id) => {
             match env.get_sym_type(&id) {
                 Some(sym_type) => {
-                    unify(ty, sym_type, &expr.span)
+                    unify(ty, sym_type, &expr.info)
                 }
                 // if we encounter an id without an id, make a tvar and keep
                 // going. we'll verify the type later when we check whatever
@@ -529,7 +530,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
                 None => {
                     let id_tvar = env.new_tvar();
                     env.insert_sym_type(*id, id_tvar.clone());
-                    unify(ty, &id_tvar, &expr.span)
+                    unify(ty, &id_tvar, &expr.info)
                 }
             }
         }
@@ -545,7 +546,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             }
 
             let out_tvar = env.new_tvar();
-            let out_subs = unify(&ty, &out_tvar, &expr.span)?;
+            let out_subs = unify(&ty, &out_tvar, &expr.info)?;
             let out_type = apply(&out_subs, out_tvar);
             subs.extend(out_subs);
 
@@ -559,7 +560,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
                     fn_tvar
                 }
             };
-            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.span)?;
+            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.info)?;
             subs.extend(fn_subs);
 
             Ok(subs)
@@ -576,14 +577,14 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             }
 
             let out_tvar = env.new_tvar();
-            let out_subs = unify(&ty, &out_tvar, &expr.span)?;
+            let out_subs = unify(&ty, &out_tvar, &expr.info)?;
             let out_type = apply(&out_subs, out_tvar);
             subs.extend(out_subs);
 
             let fn_type = Type::Func(arg_types, Box::from(out_type));
 
             let fn_sym_type = env.val_type.get(&id).expect("dangling val id");
-            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.span)?;
+            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.info)?;
             subs.extend(fn_subs);
 
             Ok(subs)
@@ -603,7 +604,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
                 subs.extend(arg_subs);
             }
 
-            let out_subs = unify(ty, &apply(&subs, *val_out_type), &expr.span)?;
+            let out_subs = unify(ty, &apply(&subs, *val_out_type), &expr.info)?;
             subs.extend(out_subs);
 
             Ok(subs)*/
@@ -668,7 +669,7 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
     }
 }
 
-fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
+fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, TypeErr> {
     //println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
@@ -711,7 +712,7 @@ fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
             if ty1 == ty2 {
                 let mut subs = HashMap::new();
                 for (tparam1, tparam2) in tparams1.iter().zip(tparams2) {
-                    let arg_subs = unify(&apply(&subs, *tparam1.clone()), &apply(&subs, *tparam2.clone()), span)?;
+                    let arg_subs = unify(&apply(&subs, *tparam1.clone()), &apply(&subs, *tparam2.clone()), info)?;
                     subs.extend(arg_subs);
                 }
 
@@ -728,11 +729,11 @@ fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
             else {
                 let mut subs = HashMap::new();
                 for (arg1, arg2) in args1.iter().zip(args2) {
-                    let arg_subs = unify(&apply(&subs, *arg1.clone()), &apply(&subs, *arg2.clone()), span)?;
+                    let arg_subs = unify(&apply(&subs, *arg1.clone()), &apply(&subs, *arg2.clone()), info)?;
                     subs.extend(arg_subs);
                 }
 
-                let out_subs = unify(&apply(&subs, *out1.clone()), &apply(&subs, *out2.clone()), span)?;
+                let out_subs = unify(&apply(&subs, *out1.clone()), &apply(&subs, *out2.clone()), info)?;
                 subs.extend(out_subs);
 
                 Some(subs)
@@ -741,7 +742,7 @@ fn unify(left: &Type, right: &Type, span: &Span) -> Result<TSubst, TypeErr> {
         }
 
         _ => None
-    }.ok_or(TypeErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), span: span.clone()})
+    }.ok_or(TypeErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
 }
 
 fn tvars(ty: &Type) -> HashSet<TVarID> {
@@ -769,6 +770,7 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
     }
 }
 
+
 #[test]
 fn func_tvars() {
     let ty = Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(1)));
@@ -779,19 +781,23 @@ fn func_tvars() {
 
 #[test]
 fn unify_prim() {
-    let res = unify(&int_prim!(), &int_prim!(), &Span {start: 0, end: 0});
+    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+
+    let res = unify(&int_prim!(), &int_prim!(), &test_info);
     assert_eq!(res.is_ok(), true);
 
-    let res = unify(&int_prim!(), &Type::Prim(String::from("Float")), &Span {start: 0, end: 0});
+    let res = unify(&int_prim!(), &Type::Prim(String::from("Float")), &test_info);
     assert_eq!(res.is_ok(), false);
 }
 
 #[test]
 fn unify_fn() {
+    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
         &Type::Func(vec![Box::from(int_prim!())], Box::from(int_prim!())),
-        &Span {start: 0, end: 0}
+        &test_info
     );
     assert_eq!(res.is_ok(), true);
     assert_eq!(*res.expect("").get(&0).expect(""), int_prim!());
@@ -799,7 +805,7 @@ fn unify_fn() {
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
         &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(0, vec![]))),
-        &Span {start: 0, end: 0}
+        &test_info
     );
     assert_eq!(res.is_ok(), false);
 }
@@ -808,16 +814,18 @@ fn unify_fn() {
 // verify that typecheck(Just(0), Maybe(Bool)) fails
 #[test]
 fn typecheck_adt() {
+    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+
     let mut env = Environment::new(0);
     env.val_type.insert(0, Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))]))));
     let expr = na::ExprNode {
         val: na::Expr::ADTVal(0, vec![
             Box::from(na::ExprNode {
                 val: na::Expr::Lit(0.0),
-                span: Span {start: 0, end: 0}
+                info: test_info.clone()
             })
         ]),
-        span: Span {start: 0, end: 0}
+        info: test_info.clone()
     };
 
     let res = typecheck(
