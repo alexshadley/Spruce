@@ -3,28 +3,29 @@ use std::io::Write;
 
 
 use crate::name_analysis::*;
+use crate::typecheck::Environment;
 
-pub fn gen_prog(out: &mut fs::File, prog: &Prog) {
+pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     let js_helpers = fs::read_to_string("src/helper.js").expect("cannot read js helpers file");
     write!(out, "{}", js_helpers).expect("failed to write helpers");
 
     for t in &prog.types {
-        write!(out, "{}", gen_type(prog, t)).expect("failed to write line");
+        write!(out, "{}", gen_type(prog, env, t)).expect("failed to write line");
     }
 
     for def in &prog.definitions {
-        let (stmt_str, _) = gen_stmt(prog, def, 0);
+        let (stmt_str, _) = gen_stmt(prog, env, def, 0);
         write!(out, "{}", stmt_str).expect("failed to write line");
     }
 
     for func in &prog.functions {
-        write!(out, "{}", gen_func(prog, func, 0)).expect("failed to write line");
+        write!(out, "{}", gen_func(prog, env, func, 0)).expect("failed to write line");
     }
 
     write!(out, "\nconsole.log(main())").expect("failed to write line");
 }
 
-fn gen_type(prog: &Prog, t: &TypeNode) -> String {
+fn gen_type(prog: &Prog, env: &Environment, t: &TypeNode) -> String {
     let mut output = format!("const {} = {{\n", t.val.name);
 
     for opt in &t.val.options {
@@ -36,7 +37,7 @@ fn gen_type(prog: &Prog, t: &TypeNode) -> String {
     output
 }
 
-fn gen_func(prog: &Prog, func_node: &FuncNode, indent: usize) -> String {
+fn gen_func(prog: &Prog, env: &Environment, func_node: &FuncNode, indent: usize) -> String {
     let func = &func_node.val;
     let mut output = append_line(&String::from(""), format!("function {}(", gen_sym(&prog.symbol_table, &func.name)), indent);
 
@@ -50,7 +51,7 @@ fn gen_func(prog: &Prog, func_node: &FuncNode, indent: usize) -> String {
     };
 
     output = format!("{}){{\n", output);
-    let (body_str, body_val) = gen_body(prog, &func.body, body_indent);
+    let (body_str, body_val) = gen_body(prog, env, &func.body, body_indent);
     output = format!("{}{}", output, body_str);
 
     body_val.map(|val| {
@@ -60,12 +61,12 @@ fn gen_func(prog: &Prog, func_node: &FuncNode, indent: usize) -> String {
     append_line(&output, String::from("}\n"), indent)
 }
 
-fn gen_body(prog: &Prog, body_node: &BodyNode, indent: usize) -> (String, Option<String>) {
+fn gen_body(prog: &Prog, env: &Environment, body_node: &BodyNode, indent: usize) -> (String, Option<String>) {
     let body = &body_node.val;
     let mut output = String::from("");
 
     for stmt in &body.stmts {
-        let (stmt_str, _) = gen_stmt(prog, stmt, indent);
+        let (stmt_str, _) = gen_stmt(prog, env, stmt, indent);
         output = append_line(&output, stmt_str, indent);
     }
 
@@ -76,7 +77,7 @@ fn gen_body(prog: &Prog, body_node: &BodyNode, indent: usize) -> (String, Option
     let val_handle = match (&body.expr, body.stmts.last()) {
         (Some(expr), _) => Some(String::from("_body_val")),
         (_, Some(stmt)) => {
-            let (_, stmt_val) = gen_stmt(prog, stmt, indent);
+            let (_, stmt_val) = gen_stmt(prog, env, stmt, indent);
             stmt_val
         }
         (_, _) => None
@@ -85,13 +86,13 @@ fn gen_body(prog: &Prog, body_node: &BodyNode, indent: usize) -> (String, Option
     (output, val_handle)
 }
 
-fn gen_stmt(prog: &Prog, stmt: &StmtNode, indent: usize) -> (String, Option<String>) {
+fn gen_stmt(prog: &Prog, env: &Environment, stmt: &StmtNode, indent: usize) -> (String, Option<String>) {
     match &stmt.val {
         Stmt::Assign(tgt, expr) => {
             let (tgt_str, tgt_var) = gen_target(prog, tgt);
             (format!("{} = {};\n", tgt_str, gen_expr(prog, expr)), Some(tgt_var))
         }
-        Stmt::Case(case) => gen_case(prog, &case, indent),
+        Stmt::Case(case) => gen_case(prog, env, &case, indent),
         Stmt::FnCall(fn_id, args) => {
             let mut output = format!("var _fn_val = {}(", gen_sym(&prog.symbol_table, fn_id).to_owned());
 
@@ -107,7 +108,7 @@ fn gen_stmt(prog: &Prog, stmt: &StmtNode, indent: usize) -> (String, Option<Stri
     }
 }
 
-fn gen_case(prog: &Prog, case_node: &CaseNode, indent: usize) -> (String, Option<String>) {
+fn gen_case(prog: &Prog, env: &Environment, case_node: &CaseNode, indent: usize) -> (String, Option<String>) {
     let case = &case_node.val;
     // first indents are already added by stmt. This should be fixed later
     let mut output = format!("var _case_expr{} = {};\n", case.id, gen_expr(prog, &case.expr));
@@ -115,14 +116,14 @@ fn gen_case(prog: &Prog, case_node: &CaseNode, indent: usize) -> (String, Option
     output = append_line(&output, format!("switch(_case_expr{}[0]){{\n", case.id), indent);
 
     for opt in &case.options {
-        output = format!("{}{}", output, gen_case_option(&prog, &opt, case.id, indent + 1));
+        output = format!("{}{}", output, gen_case_option(prog, env, &opt, case.id, indent + 1));
     }
 
     output = append_line(&output, String::from("}\n"), indent);
     (output, Some(format!("_case_val{}", case.id)))
 }
 
-fn gen_case_option(prog: &Prog, option_node: &CaseOptionNode, case_id: CaseID, indent: usize) -> String {
+fn gen_case_option(prog: &Prog, env: &Environment, option_node: &CaseOptionNode, case_id: CaseID, indent: usize) -> String {
     let option = &option_node.val;
     let mut output = append_line(&String::from(""), format!("case {}:\n", gen_pattern(prog, &option.pattern)), indent);
 
@@ -134,7 +135,7 @@ fn gen_case_option(prog: &Prog, option_node: &CaseOptionNode, case_id: CaseID, i
 
     match &option.body.val {
         CaseBody::Body(body) => {
-            let (body, val_handle) = gen_body(prog, body, body_indent);
+            let (body, val_handle) = gen_body(prog, env, body, body_indent);
             output = format!("{}{}", output, body);
             val_handle.map(|handle| {
                 output = append_line(&output, format!("_case_val{} = {};\n", case_id, handle), body_indent);

@@ -13,6 +13,10 @@ mod name_analysis;
 mod typecheck;
 mod codegen;
 
+/// Compilation takes place in four phases: Parsing, Name Analysis, Type
+/// Checking, and Code Generation. Parsing and Name Analysis both emit their
+/// own IR, Type Checking simply emits a mapping from symbols to types, and
+/// Code Generation writes the compiled javascript to a file
 fn main() {
     let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
     let unparsed_file = fs::read_to_string("src/samples/lists.sp").expect("cannot read file");
@@ -30,16 +34,15 @@ fn main() {
     };
     println!("{:#?}", analyzed_prog);
 
-    let check_res = typecheck::check_prog(&analyzed_prog);
-    match check_res {
-        Ok(env) => {
-            println!("{}", env.as_str(&analyzed_prog));
-        }
+    let environment = match typecheck::check_prog(&analyzed_prog) {
+        Ok(env) => env,
         Err(type_err) => {
             print!("{}", type_err.as_str(&files));
+            return;
         }
-    }
+    };
+    println!("{}", environment.as_str(&analyzed_prog));
 
     let mut out_file = fs::File::create("out.js").expect("failed to create file");
-    codegen::gen_prog(&mut out_file, &analyzed_prog);
+    codegen::gen_prog(&mut out_file, &analyzed_prog, &environment);
 }

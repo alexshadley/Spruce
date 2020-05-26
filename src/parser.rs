@@ -27,12 +27,6 @@ lazy_static! {
     };
 }
 
-/*#[derive(Debug, PartialEq)]
-/pub enum Literal {
-    Int(i64),
-    Float(f64),
-}*/
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct NodeInfo {
     pub span: Span,
