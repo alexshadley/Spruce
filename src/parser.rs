@@ -6,7 +6,7 @@ use pest::iterators::{Pairs, Pair};
 use pest::prec_climber::{PrecClimber, Operator, Assoc};
 use pest::error::InputLocation;
 
-use crate::error::ParseErr;
+use crate::error::SpruceErr;
 
 
 #[derive(Parser)]
@@ -536,7 +536,7 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     }
 }
 
-pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, ParseErr> {
+pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, SpruceErr> {
     let mut parse_results = Vec::new();
     for (file, name) in unparsed {
         let parsed = ExprParser::parse(Rule::file, &file);
@@ -547,7 +547,7 @@ pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, ParseErr> {
             Err(e) => {
                 let err = match e.location {
                     InputLocation::Pos(pos) => {
-                        ParseErr {
+                        SpruceErr {
                             message: String::from("Parse error"),
                             info: NodeInfo {
                                 span: Span {start: pos, end: pos},
@@ -556,7 +556,7 @@ pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, ParseErr> {
                         }
                     }
                     InputLocation::Span((start, end)) => {
-                        ParseErr {
+                        SpruceErr {
                             message: String::from("Parse error"),
                             info: NodeInfo {
                                 span: Span {start: start, end: end},

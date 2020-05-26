@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-use crate::error::TypeErr;
+use crate::error::SpruceErr;
 use crate::name_analysis as na;
 use crate::parser;
 use crate::parser::{NodeInfo, Span};
@@ -190,7 +190,7 @@ impl Environment {
 /// and typecheck
 type TSubst = HashMap<TVarID, Type>;
 
-pub fn check_prog(prog: &na::Prog) -> Result<Environment, TypeErr> {
+pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     let mut env = Environment::new(prog.internal_types.clone());
 
     let mut tparams: HashMap<na::TParamID, Type> = HashMap::new();
@@ -254,7 +254,7 @@ fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<n
     }
 }
 
-fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeErr> {
+fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, SpruceErr> {
     let mut arg_types = Vec::new();
     for arg in &func.val.args {
         let arg_tvar = env.new_tvar();
@@ -277,7 +277,7 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
                     env.apply_subs(&subs);
                 }
                 Err(type_err) => {
-                    return Err(TypeErr {
+                    return Err(SpruceErr {
                         message: String::from("Function definiton incompatible with earlier function call"),
                         info: type_err.info.clone()
                     })
@@ -295,7 +295,7 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, TypeEr
 }
 
 
-fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, TypeErr> {
+fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, SpruceErr> {
     let mut subs = HashMap::new();
 
     let expr_tvar = env.new_tvar();
@@ -323,7 +323,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
             }
             Some(pat_type_id) => {
                 if pat_type_id != *opt_pat_type_id {
-                    return Err(TypeErr {
+                    return Err(SpruceErr {
                         message: format!("case statement has patterns of both types {} and {}", pat_type_id, opt_pat_type_id),
                         info: opt.val.pattern.info.clone()
                     })
@@ -391,7 +391,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
 
     if is_unit {
         if has_expr {
-            return Err(TypeErr {
+            return Err(SpruceErr {
                 message: String::from("Case with expr must have type"),
                 info: case.info.clone()
             });
@@ -405,7 +405,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     Ok(subs)
 }
 
-fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<TSubst, TypeErr> {
+fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<TSubst, SpruceErr> {
     let mut stmt_types = Vec::new();
     let mut subs = HashMap::new();
     for stmt in &body.val.stmts {
@@ -496,7 +496,7 @@ macro_rules! bool_adt {
 }
 
 // TODO: add apply_env everywhere
-fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, TypeErr> {
+fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TSubst, SpruceErr> {
     println!("Typecheck {:?} and {:?}", expr.val, ty);
     let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.info),
@@ -644,7 +644,7 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
     }
 }
 
-fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, TypeErr> {
+fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr> {
     //println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
@@ -717,7 +717,7 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, TypeErr> 
         }
 
         _ => None
-    }.ok_or(TypeErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
+    }.ok_or(SpruceErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
 }
 
 fn tvars(ty: &Type) -> HashSet<TVarID> {
