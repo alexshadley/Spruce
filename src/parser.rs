@@ -10,7 +10,7 @@ use crate::error::ParseErr;
 
 
 #[derive(Parser)]
-#[grammar = "expr.pest"]
+#[grammar = "spruce.pest"]
 pub struct ExprParser;
 
 lazy_static! {

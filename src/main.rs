@@ -19,7 +19,7 @@ mod codegen;
 /// Code Generation writes the compiled javascript to a file
 fn main() {
     let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let unparsed_file = fs::read_to_string("src/samples/lists.sp").expect("cannot read file");
+    let unparsed_file = fs::read_to_string("samples/lists.sp").expect("cannot read file");
     let files = vec![(prelude.as_str(), String::from("prelude")), (unparsed_file.as_str(), String::from("main"))];
 
     let prog = match parser::parse(files.clone()) {
