@@ -15,7 +15,7 @@ exists to coordinate the work of building new features.
 | Tuple | |
 | Record / Struct | |
 
-In general the Spruce approach to primitives has not revieved a lot of
+In general the Spruce approach to primitives has not received a lot of
 thought. My general instinct is to implement as many types as possible in
 Spruce's type system, but obviously that doesn't make sense for things like
 Int and Float. Also, I don't think String should be implemented as a List of
