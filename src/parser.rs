@@ -4,7 +4,9 @@ extern crate pest;
 use pest::{Parser};
 use pest::iterators::{Pairs, Pair};
 use pest::prec_climber::{PrecClimber, Operator, Assoc};
-use pest::error::LineColLocation;
+use pest::error::InputLocation;
+
+use crate::error::ParseErr;
 
 
 #[derive(Parser)]
@@ -534,7 +536,7 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     }
 }
 
-pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, String> {
+pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, ParseErr> {
     let mut parse_results = Vec::new();
     for (file, name) in unparsed {
         let parsed = ExprParser::parse(Rule::file, &file);
@@ -543,11 +545,27 @@ pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, String> {
                 parse_results.push((pairs, name));
             }
             Err(e) => {
-                let err_msg = match e.line_col {
-                    LineColLocation::Pos((line, col)) => format!("Parse error at: {} {}", line, col),
-                    LineColLocation::Span((line, col), _) => format!("Parse error at: {} {}", line, col)
+                let err = match e.location {
+                    InputLocation::Pos(pos) => {
+                        ParseErr {
+                            message: String::from("Parse error"),
+                            info: NodeInfo {
+                                span: Span {start: pos, end: pos},
+                                file: name.clone()
+                            }
+                        }
+                    }
+                    InputLocation::Span((start, end)) => {
+                        ParseErr {
+                            message: String::from("Parse error"),
+                            info: NodeInfo {
+                                span: Span {start: start, end: end},
+                                file: name.clone()
+                            }
+                        }
+                    }
                 };
-                return Err(err_msg);
+                return Err(err);
             }
         }
     }

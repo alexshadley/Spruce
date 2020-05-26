@@ -182,12 +182,6 @@ pub struct TypeOption {
     pub args: Vec<String>
 }
 
-/*#[derive(Debug, PartialEq)]
-pub struct TypeIdentifier {
-    pub name: String,
-    pub args: Vec<Box<TypeIdentifier>>
-}*/
-
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,

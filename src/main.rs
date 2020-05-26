@@ -22,7 +22,13 @@ fn main() {
     let unparsed_file = fs::read_to_string("src/samples/lists.sp").expect("cannot read file");
     let files = vec![(prelude.as_str(), String::from("prelude")), (unparsed_file.as_str(), String::from("main"))];
 
-    let prog = parser::parse(files.clone()).expect("Parse failed");
+    let prog = match parser::parse(files.clone()) {
+        Ok(p) => p,
+        Err(parse_err) => {
+            print!("{}", parse_err.as_str(&files));
+            return;
+        }
+    };
     println!("{:#?}", prog);
 
     let analyzed_prog = match name_analysis::name_analysis(prog) {
