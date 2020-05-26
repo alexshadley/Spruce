@@ -216,7 +216,7 @@ pub struct InternalTypes {
 pub struct Prog {
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
-    pub types: Vec<TypeNode>,
+    //pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
     pub type_table: TypeTableExt,
     pub internal_types: InternalTypes
@@ -250,7 +250,7 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, NameErr> {
     let out_prog = Prog {
         functions: funcs, 
         definitions: defs,
-        types: types,
+        //types: types,
         symbol_table: sym_table,
         type_table: type_table.to_ext(),
         internal_types: internal_types
