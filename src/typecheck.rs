@@ -4,8 +4,7 @@ use std::iter::FromIterator;
 
 use crate::error::SpruceErr;
 use crate::name_analysis as na;
-use crate::parser;
-use crate::parser::{NodeInfo, Span};
+use crate::parser::NodeInfo;
 
 type TVarID = u32;
 
@@ -194,7 +193,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     let mut env = Environment::new(prog.internal_types.clone());
 
     let mut tparams: HashMap<na::TParamID, Type> = HashMap::new();
-    let mut adts: HashMap<na::ADTID, Type> = HashMap::new();
+    let _adts: HashMap<na::ADTID, Type> = HashMap::new();
     for (_, ty) in &prog.type_table.types {
         let adt_params = ty.type_params.iter();
         let tvars = adt_params.map(|id| {
@@ -309,7 +308,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let mut pattern_type_id = None;
     for opt in &case.val.options {
         let opt_pat_type_id = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
-            Type::Func(args, out) => {
+            Type::Func(_args, out) => {
                 match &**out {
                     Type::ADT(id, _) => id,
                     _ => unreachable!()
@@ -333,7 +332,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     }
 
     let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id").clone();
-    let (adt_id, adt_args) = match &adt_type {
+    let (_adt_id, _adt_args) = match &adt_type {
         Type::ADT(id, args) => (id, args),
         _ => unreachable!()
     };
@@ -489,6 +488,12 @@ macro_rules! int_prim {
     };
 }
 
+macro_rules! str_prim {
+    () => {
+        Type::Prim(String::from("String"))
+    };
+}
+
 macro_rules! bool_adt {
     ($e:ident) => {
         Type::ADT($e.internal_types.bool_id, vec![])
@@ -500,6 +505,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
     println!("Typecheck {:?} and {:?}", expr.val, ty);
     let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.info),
+        na::Expr::StringLit(_) => unify(ty, &str_prim!(), &expr.info),
         na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
         na::Expr::Div(left, right) | na::Expr::Pow(left, right) | na::Expr::Mod(left, right) => {
             let mut subs = unify(ty, &int_prim!(), &expr.info)?;

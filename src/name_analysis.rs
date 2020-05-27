@@ -42,6 +42,7 @@ pub enum Expr {
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<ExprNode>>),
     Lit(f64),
+    StringLit(String),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
@@ -620,6 +621,8 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
 
         parser::Expr::Lit(val) => Ok(Expr::Lit(*val)),
 
+        parser::Expr::StringLit(val) => Ok(Expr::StringLit(val.clone())),
+
         parser::Expr::Add(l, r) => {
             let left = check_expr(table, types, &*l)?;
             let right = check_expr(table, types, &*r)?;
@@ -794,7 +797,7 @@ impl TypeTable {
     }
 
     fn add_value(&mut self, name: &String, args: &Vec<TypeID>, data_type: &String) {
-        let mut r = self.types.get_mut(data_type);
+        let r = self.types.get_mut(data_type);
         match r {
             Some(adt) => {
                 let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
@@ -835,8 +838,8 @@ impl TypeTable {
 
     fn to_ext(self) -> TypeTableExt {
         TypeTableExt {
-            types: self.types.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
-            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
+            types: self.types.into_iter().map(|(_k, v)| {(v.id, v)}).collect(),
+            values: self.values.into_iter().map(|(_k, v)| {(v.id, v)}).collect(),
             primitives: self.primitives
         }
     }

@@ -58,6 +58,7 @@ pub enum Expr {
     FnCall(String, Vec<Box<ExprNode>>),
     Id(String),
     Lit(f64),
+    StringLit(String),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
@@ -236,6 +237,10 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                 val: Expr::Lit(pair.as_str().parse::<f64>().unwrap()),
                 info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
             },
+            Rule::string => ExprNode {
+                val: Expr::StringLit(String::from(pair.as_str())),
+                info: NodeInfo {span: Span::from(pair.as_span()), file:file_name.clone()}
+            },
             Rule::expr => to_expr(pair, file_name),
             Rule::fn_call => {
                 let pair_span = pair.as_span();
@@ -412,7 +417,7 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
     }
 }
 
-fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
+fn to_func(p: Pair<Rule>, file_name: &String) -> FuncNode {
     let func_span = p.as_span();
     let mut func = p.into_inner();
 
@@ -461,7 +466,7 @@ fn to_type_option(option: Pair<Rule>, file_name: &String) -> TypeOptionNode {
 }
 
 fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
-    let ident_span = ident.as_span();
+    let _ident_span = ident.as_span();
 
     let mut children = ident.into_inner();
 
@@ -477,14 +482,14 @@ fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
     }
 }
 
-fn to_type(mut t: Pair<Rule>, file_name: &String) -> TypeNode {
+fn to_type(t: Pair<Rule>, file_name: &String) -> TypeNode {
     let type_span = t.as_span();
     let mut children = t.into_inner();
 
     let name = String::from(children.next().unwrap().as_str());
 
     let mut params = Vec::new();
-    let mut param_tokens = children.next().unwrap().into_inner();
+    let param_tokens = children.next().unwrap().into_inner();
     for param_token in param_tokens {
         params.push(String::from(param_token.as_str()));
     }
