@@ -28,7 +28,7 @@ case_pattern = { id ~ ( "(" ~ id ~ ( "," ~ id )*  ~ ")")? }
 body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
 
 expr = { term ~ (operation ~ term)* }
-term = _{ fn_call | id | num | "(" ~ expr ~ ")" }
+term = _{ fn_call | id | num | string | "(" ~ expr ~ ")" }
 
 fn_call = { id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 
