@@ -4,7 +4,7 @@ use std::iter::FromIterator;
 
 use crate::error::SpruceErr;
 use crate::name_analysis as na;
-use crate::parser::NodeInfo;
+use crate::parser::{NodeInfo, Span};
 
 type TVarID = u32;
 
