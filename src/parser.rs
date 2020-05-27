@@ -1,13 +1,11 @@
-
 extern crate pest;
 
-use pest::{Parser};
-use pest::iterators::{Pairs, Pair};
-use pest::prec_climber::{PrecClimber, Operator, Assoc};
 use pest::error::InputLocation;
+use pest::iterators::{Pair, Pairs};
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
+use pest::Parser;
 
 use crate::error::SpruceErr;
-
 
 #[derive(Parser)]
 #[grammar = "spruce.pest"]
@@ -15,12 +13,15 @@ pub struct ExprParser;
 
 lazy_static! {
     static ref PREC_CLIMBER: PrecClimber<Rule> = {
-        use Rule::*;
         use Assoc::*;
+        use Rule::*;
 
         PrecClimber::new(vec![
             Operator::new(eq, Left) | Operator::new(not_eq, Left),
-            Operator::new(lt_eq, Left) | Operator::new(gt_eq, Left) | Operator::new(lt, Left) | Operator::new(gt, Left),
+            Operator::new(lt_eq, Left)
+                | Operator::new(gt_eq, Left)
+                | Operator::new(lt, Left)
+                | Operator::new(gt, Left),
             Operator::new(modulus, Left),
             Operator::new(add, Left) | Operator::new(subtract, Left),
             Operator::new(multiply, Left) | Operator::new(divide, Left),
@@ -32,18 +33,21 @@ lazy_static! {
 #[derive(Debug, PartialEq, Clone)]
 pub struct NodeInfo {
     pub span: Span,
-    pub file: String
+    pub file: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Span {
     pub start: usize,
-    pub end: usize
+    pub end: usize,
 }
 
 impl Span {
     fn from(sp: pest::Span) -> Self {
-        Span {start: sp.start(), end: sp.end() }
+        Span {
+            start: sp.start(),
+            end: sp.end(),
+        }
     }
 }
 
@@ -69,159 +73,158 @@ pub enum Expr {
 #[derive(Debug, PartialEq)]
 pub struct ExprNode {
     pub val: Expr,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Body {
     pub stmts: Vec<StmtNode>,
-    pub expr: Option<ExprNode>
+    pub expr: Option<ExprNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct BodyNode {
     pub val: Body,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Case {
     pub expr: ExprNode,
-    pub options: Vec<CaseOptionNode>
+    pub options: Vec<CaseOptionNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseNode {
     pub val: Case,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CasePattern {
     pub base: String,
-    pub args: Vec<String> 
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CasePatternNode {
     pub val: CasePattern,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
-
 
 #[derive(Debug, PartialEq)]
 pub struct CaseOption {
     pub pattern: CasePatternNode,
-    pub body: CaseBodyNode
+    pub body: CaseBodyNode,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseOptionNode {
     pub val: CaseOption,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CaseBody {
     Expr(ExprNode),
-    Body(BodyNode)
+    Body(BodyNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseBodyNode {
     pub val: CaseBody,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
-// this will allow case statements to be assigned to variables, when 
+// this will allow case statements to be assigned to variables, when
 // that feature is impelmented
 #[derive(Debug, PartialEq)]
 pub enum Valued {
     Expr(ExprNode),
-    Case(CaseNode)
+    Case(CaseNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ValuedNode {
     pub val: Valued,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     Assign(TargetNode, ExprNode),
     FnCall(String, Vec<ExprNode>),
-    Case(CaseNode)
+    Case(CaseNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct StmtNode {
     pub val: Stmt,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Target {
     Var(String),
     Mutable(String),
-    Update(String)
+    Update(String),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TargetNode {
     pub val: Target,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Type {
     pub name: String,
     pub type_params: Vec<String>,
-    pub options: Vec<TypeOptionNode>
+    pub options: Vec<TypeOptionNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeNode {
     pub val: Type,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeOption {
     pub name: String,
-    pub args: Vec<TypeIdentifier>
+    pub args: Vec<TypeIdentifier>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeIdentifier {
     pub name: String,
-    pub args: Vec<Box<TypeIdentifier>>
+    pub args: Vec<Box<TypeIdentifier>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: String,
     pub args: Vec<String>,
-    pub body: BodyNode
+    pub body: BodyNode,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct FuncNode {
     pub val: Func,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
-    pub types: Vec<TypeNode>
+    pub types: Vec<TypeNode>,
 }
 
 fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
@@ -230,11 +233,17 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
         |pair: Pair<Rule>| match pair.as_rule() {
             Rule::id => ExprNode {
                 val: Expr::Id(String::from(pair.as_str())),
-                info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
+                info: NodeInfo {
+                    span: Span::from(pair.as_span()),
+                    file: file_name.clone(),
+                },
             },
             Rule::num => ExprNode {
                 val: Expr::Lit(pair.as_str().parse::<f64>().unwrap()),
-                info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
+                info: NodeInfo {
+                    span: Span::from(pair.as_span()),
+                    file: file_name.clone(),
+                },
             },
             Rule::expr => to_expr(pair, file_name),
             Rule::fn_call => {
@@ -242,35 +251,44 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
 
                 let mut children = pair.into_inner();
                 let id = String::from(children.next().unwrap().as_str());
-                let args = children.into_iter().map(|arg| { Box::from(to_expr(arg, file_name)) }).collect();
+                let args = children
+                    .into_iter()
+                    .map(|arg| Box::from(to_expr(arg, file_name)))
+                    .collect();
 
                 ExprNode {
                     val: Expr::FnCall(id, args),
-                    info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
+                    info: NodeInfo {
+                        span: Span::from(pair_span),
+                        file: file_name.clone(),
+                    },
                 }
             }
             _ => unreachable!(),
         },
         |lhs: ExprNode, op: Pair<Rule>, rhs: ExprNode| {
             let expr = match op.as_rule() {
-                Rule::add      => Expr::Add(Box::from(lhs), Box::from(rhs)),
+                Rule::add => Expr::Add(Box::from(lhs), Box::from(rhs)),
                 Rule::subtract => Expr::Subt(Box::from(lhs), Box::from(rhs)),
                 Rule::multiply => Expr::Mult(Box::from(lhs), Box::from(rhs)),
-                Rule::divide   => Expr::Div(Box::from(lhs), Box::from(rhs)),
-                Rule::power    => Expr::Pow(Box::from(lhs), Box::from(rhs)),
-                Rule::modulus  => Expr::Mod(Box::from(lhs), Box::from(rhs)),
-                Rule::eq       => Expr::Eq(Box::from(lhs), Box::from(rhs)),
-                Rule::not_eq   => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
-                Rule::lt_eq    => Expr::LtEq(Box::from(lhs), Box::from(rhs)),
-                Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
-                Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
-                Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
+                Rule::divide => Expr::Div(Box::from(lhs), Box::from(rhs)),
+                Rule::power => Expr::Pow(Box::from(lhs), Box::from(rhs)),
+                Rule::modulus => Expr::Mod(Box::from(lhs), Box::from(rhs)),
+                Rule::eq => Expr::Eq(Box::from(lhs), Box::from(rhs)),
+                Rule::not_eq => Expr::NotEq(Box::from(lhs), Box::from(rhs)),
+                Rule::lt_eq => Expr::LtEq(Box::from(lhs), Box::from(rhs)),
+                Rule::gt_eq => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
+                Rule::lt => Expr::Lt(Box::from(lhs), Box::from(rhs)),
+                Rule::gt => Expr::Gt(Box::from(lhs), Box::from(rhs)),
                 _ => unreachable!(),
             };
 
             ExprNode {
                 val: expr,
-                info: NodeInfo{span: Span::from(op.as_span()), file: file_name.clone()}
+                info: NodeInfo {
+                    span: Span::from(op.as_span()),
+                    file: file_name.clone(),
+                },
             }
         },
     )
@@ -294,16 +312,19 @@ fn to_body(body: Pair<Rule>, file_name: &String) -> BodyNode {
                 unreachable!();
             }
         }
-    };
+    }
 
     let body_struct = Body {
         stmts: stmts,
-        expr: expr
+        expr: expr,
     };
 
     BodyNode {
         val: body_struct,
-        info: NodeInfo {span: Span::from(body_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(body_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -314,11 +335,20 @@ fn to_case_option(option: Pair<Rule>, file_name: &String) -> CaseOptionNode {
     let mut pattern_children = children.next().unwrap().into_inner();
     let pattern_token = pattern_children.next().unwrap();
     let pattern_base = String::from(pattern_token.as_str());
-    let pattern_args = pattern_children.into_iter().map(|arg| { String::from(arg.as_str()) }).collect();
+    let pattern_args = pattern_children
+        .into_iter()
+        .map(|arg| String::from(arg.as_str()))
+        .collect();
     let pattern = CasePatternNode {
-        val: CasePattern { base: pattern_base, args: pattern_args },
+        val: CasePattern {
+            base: pattern_base,
+            args: pattern_args,
+        },
         // TODO: make span both base and args
-        info: NodeInfo {span: Span::from(pattern_token.as_span()), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(pattern_token.as_span()),
+            file: file_name.clone(),
+        },
     };
 
     let body_token = children.next().unwrap();
@@ -327,19 +357,25 @@ fn to_case_option(option: Pair<Rule>, file_name: &String) -> CaseOptionNode {
         val: match body_token.as_rule() {
             Rule::expr => CaseBody::Expr(to_expr(body_token, file_name)),
             Rule::body => CaseBody::Body(to_body(body_token, file_name)),
-            _ => unreachable!()
+            _ => unreachable!(),
         },
-        info: NodeInfo {span: Span::from(body_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(body_span),
+            file: file_name.clone(),
+        },
     };
 
     let case_option = CaseOption {
         pattern: pattern,
-        body: body
+        body: body,
     };
 
     CaseOptionNode {
         val: case_option,
-        info: NodeInfo {span: Span::from(option_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(option_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -356,12 +392,15 @@ fn to_case(case: Pair<Rule>, file_name: &String) -> CaseNode {
 
     let case_struct = Case {
         expr: expr,
-        options: options
+        options: options,
     };
 
     CaseNode {
         val: case_struct,
-        info: NodeInfo {span: Span::from(case_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(case_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -375,13 +414,20 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
             let tgt_span = tgt.as_span();
             let target_val = match tgt.as_rule() {
                 Rule::id => Target::Var(String::from(tgt.as_str())),
-                Rule::mutable_tgt => Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str())),
-                Rule::update_tgt => Target::Update(String::from(tgt.into_inner().next().unwrap().as_str())),
-                _ => unreachable!()
+                Rule::mutable_tgt => {
+                    Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str()))
+                }
+                Rule::update_tgt => {
+                    Target::Update(String::from(tgt.into_inner().next().unwrap().as_str()))
+                }
+                _ => unreachable!(),
             };
             let target = TargetNode {
                 val: target_val,
-                info: NodeInfo {span: Span::from(tgt_span), file: file_name.clone()}
+                info: NodeInfo {
+                    span: Span::from(tgt_span),
+                    file: file_name.clone(),
+                },
             };
             let expr = to_expr(children.next().unwrap(), file_name);
             Stmt::Assign(target, expr)
@@ -397,9 +443,7 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
 
             Stmt::FnCall(id, args)
         }
-        Rule::case => {
-            Stmt::Case(to_case(stmt, file_name))
-        }
+        Rule::case => Stmt::Case(to_case(stmt, file_name)),
         _ => {
             println!("rule {:?} encountered", stmt.as_rule());
             unreachable!();
@@ -408,7 +452,10 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
 
     StmtNode {
         val: stmt_val,
-        info: NodeInfo {span: Span::from(stmt_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(stmt_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -429,12 +476,15 @@ fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
     let func = Func {
         name: id,
         args: arg_vec,
-        body: body
+        body: body,
     };
 
     FuncNode {
         val: func,
-        info: NodeInfo {span: Span::from(func_span), file: file_name.clone()}
+        info: NodeInfo {
+            span: Span::from(func_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -451,12 +501,15 @@ fn to_type_option(option: Pair<Rule>, file_name: &String) -> TypeOptionNode {
     }
     let type_option_val = TypeOption {
         name: name,
-        args: args
+        args: args,
     };
 
     TypeOptionNode {
         val: type_option_val,
-        info: NodeInfo {span: Span::from(option_span), file: file_name.clone() }
+        info: NodeInfo {
+            span: Span::from(option_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -473,7 +526,7 @@ fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
     }
     TypeIdentifier {
         name: name,
-        args: args
+        args: args,
     }
 }
 
@@ -497,12 +550,15 @@ fn to_type(mut t: Pair<Rule>, file_name: &String) -> TypeNode {
     let type_val = Type {
         name: name,
         type_params: params,
-        options: options
+        options: options,
     };
 
     TypeNode {
         val: type_val,
-        info: NodeInfo {span: Span::from(type_span), file: file_name.clone() }
+        info: NodeInfo {
+            span: Span::from(type_span),
+            file: file_name.clone(),
+        },
     }
 }
 
@@ -515,16 +571,16 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
         for element in file {
             match element.as_rule() {
                 Rule::function_decl => {
-                    functions.push( to_func(element, &name) );
+                    functions.push(to_func(element, &name));
                 }
                 Rule::assign => {
-                    stmts.push( to_stmt(element, &name) );
+                    stmts.push(to_stmt(element, &name));
                 }
                 Rule::type_decl => {
-                    types.push( to_type(element, &name) );
+                    types.push(to_type(element, &name));
                 }
                 Rule::EOI => (),
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
     }
@@ -532,7 +588,7 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     Prog {
         functions: functions,
         definitions: stmts,
-        types: types
+        types: types,
     }
 }
 
@@ -546,24 +602,26 @@ pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, SpruceErr> {
             }
             Err(e) => {
                 let err = match e.location {
-                    InputLocation::Pos(pos) => {
-                        SpruceErr {
-                            message: String::from("Parse error"),
-                            info: NodeInfo {
-                                span: Span {start: pos, end: pos},
-                                file: name.clone()
-                            }
-                        }
-                    }
-                    InputLocation::Span((start, end)) => {
-                        SpruceErr {
-                            message: String::from("Parse error"),
-                            info: NodeInfo {
-                                span: Span {start: start, end: end},
-                                file: name.clone()
-                            }
-                        }
-                    }
+                    InputLocation::Pos(pos) => SpruceErr {
+                        message: String::from("Parse error"),
+                        info: NodeInfo {
+                            span: Span {
+                                start: pos,
+                                end: pos,
+                            },
+                            file: name.clone(),
+                        },
+                    },
+                    InputLocation::Span((start, end)) => SpruceErr {
+                        message: String::from("Parse error"),
+                        info: NodeInfo {
+                            span: Span {
+                                start: start,
+                                end: end,
+                            },
+                            file: name.clone(),
+                        },
+                    },
                 };
                 return Err(err);
             }

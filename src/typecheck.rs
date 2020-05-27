@@ -17,7 +17,7 @@ enum Type {
     TVar(TVarID),
     // the ADT, followed by type params
     ADT(na::ADTID, Vec<Box<Type>>),
-    Func(Vec<Box<Type>>, Box<Type>)
+    Func(Vec<Box<Type>>, Box<Type>),
 }
 
 impl Type {
@@ -29,47 +29,75 @@ impl Type {
         self.as_str_inner(prog, &mut tvar_names, &mut next_name)
     }
 
-    fn as_str_inner(&self, prog: &na::Prog, tvar_names: &mut HashMap<TVarID, String>, next_name: &mut u8) -> String {
+    fn as_str_inner(
+        &self,
+        prog: &na::Prog,
+        tvar_names: &mut HashMap<TVarID, String>,
+        next_name: &mut u8,
+    ) -> String {
         match self {
-            Type::TVar(id) => {
-                match tvar_names.get(id) {
-                    Some(repr) => repr.clone(),
-                    None => {
-                        let tvar_repr = ((*next_name + 97) as char).to_string();
-                        *next_name += 1;
-                        tvar_names.insert(*id, tvar_repr.clone());
-                        tvar_repr
-                    }
+            Type::TVar(id) => match tvar_names.get(id) {
+                Some(repr) => repr.clone(),
+                None => {
+                    let tvar_repr = ((*next_name + 97) as char).to_string();
+                    *next_name += 1;
+                    tvar_names.insert(*id, tvar_repr.clone());
+                    tvar_repr
                 }
-            }
+            },
             Type::Unit => String::from("()"),
             Type::Prim(name) => name.clone(),
             Type::ADT(id, args) => {
-                let name = prog.type_table.types.get(id).expect("dangling type id").name.clone();
+                let name = prog
+                    .type_table
+                    .types
+                    .get(id)
+                    .expect("dangling type id")
+                    .name
+                    .clone();
                 if args.len() == 0 {
                     name.clone()
-                }
-                else {
+                } else {
                     let mut output = format!("{}(", name);
                     args.first().as_ref().map(|arg| {
-                        output = format!("{}{}", output, arg.as_str_inner(prog, tvar_names, next_name));
+                        output = format!(
+                            "{}{}",
+                            output,
+                            arg.as_str_inner(prog, tvar_names, next_name)
+                        );
                     });
                     for arg in args.iter().skip(1) {
-                        output = format!("{}, {}", output, arg.as_str_inner(prog, tvar_names, next_name));
-                    };
+                        output = format!(
+                            "{}, {}",
+                            output,
+                            arg.as_str_inner(prog, tvar_names, next_name)
+                        );
+                    }
                     format!("{})", output)
                 }
             }
             Type::Func(args, out) => {
                 let mut output = String::from("(");
                 args.first().as_ref().map(|arg| {
-                    output = format!("{}{}", output, arg.as_str_inner(prog, tvar_names, next_name));
+                    output = format!(
+                        "{}{}",
+                        output,
+                        arg.as_str_inner(prog, tvar_names, next_name)
+                    );
                 });
                 for arg in args.iter().skip(1) {
-                    output = format!("{}, {}", output, arg.as_str_inner(prog, tvar_names, next_name));
-                };
+                    output = format!(
+                        "{}, {}",
+                        output,
+                        arg.as_str_inner(prog, tvar_names, next_name)
+                    );
+                }
 
-                format!("{}) -> {}", output, out.as_str_inner(prog, tvar_names, next_name))
+                format!(
+                    "{}) -> {}",
+                    output,
+                    out.as_str_inner(prog, tvar_names, next_name)
+                )
             }
         }
     }
@@ -84,15 +112,14 @@ impl Type {
                 let name = format!("adt{}", id);
                 if args.len() == 0 {
                     name.clone()
-                }
-                else {
+                } else {
                     let mut output = format!("{}(", name);
                     args.first().as_ref().map(|arg| {
                         output = format!("{}{}", output, arg.as_str_debug());
                     });
                     for arg in args.iter().skip(1) {
                         output = format!("{}, {}", output, arg.as_str_debug());
-                    };
+                    }
                     format!("{})", output)
                 }
             }
@@ -103,7 +130,7 @@ impl Type {
                 });
                 for arg in args.iter().skip(1) {
                     output = format!("{}, {}", output, arg.as_str_debug());
-                };
+                }
 
                 format!("{}) -> {}", output, out.as_str_debug())
             }
@@ -126,18 +153,18 @@ pub struct Environment {
     val_type: HashMap<na::ADTValID, Type>,
 
     // prelude adts are used internally, so we need to record their type ids
-    internal_types: na::InternalTypes
+    internal_types: na::InternalTypes,
 }
 
 impl Environment {
     fn new(internal_types: na::InternalTypes) -> Self {
         Environment {
             next_type_var: 0,
-            complete_sym_type: HashMap::new(), 
-            active_sym_type: HashMap::new(), 
-            val_type: HashMap::new(), 
+            complete_sym_type: HashMap::new(),
+            active_sym_type: HashMap::new(),
+            val_type: HashMap::new(),
             adt_type: HashMap::new(),
-            internal_types: internal_types
+            internal_types: internal_types,
         }
     }
 
@@ -149,9 +176,7 @@ impl Environment {
     fn get_sym_type(&self, id: &na::SymbolID) -> Option<&Type> {
         match self.active_sym_type.get(id) {
             Some(ty) => Some(ty),
-            None => {
-                self.complete_sym_type.get(id)
-            }
+            None => self.complete_sym_type.get(id),
         }
     }
 
@@ -170,15 +195,23 @@ impl Environment {
     /// applies a set of substitutions to active symbols in the environment,
     /// refining type variables to more specific types
     fn apply_subs(&mut self, subs: &TSubst) {
-        self.active_sym_type = self.active_sym_type.iter().map(|(k, ty)| {
-            (*k, apply(subs, (*ty).clone()))
-        }).collect();
+        self.active_sym_type = self
+            .active_sym_type
+            .iter()
+            .map(|(k, ty)| (*k, apply(subs, (*ty).clone())))
+            .collect();
     }
 
     pub fn as_str(&self, prog: &na::Prog) -> String {
         let mut output = String::from("");
         for (id, ty) in &self.complete_sym_type {
-            let name = prog.symbol_table.store.get(id).expect("dangling symbol id").name.clone();
+            let name = prog
+                .symbol_table
+                .store
+                .get(id)
+                .expect("dangling symbol id")
+                .name
+                .clone();
             output = format!("{}{} : {}\n", output, name, ty.as_str(prog));
         }
 
@@ -197,23 +230,30 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     let mut adts: HashMap<na::ADTID, Type> = HashMap::new();
     for (_, ty) in &prog.type_table.types {
         let adt_params = ty.type_params.iter();
-        let tvars = adt_params.map(|id| {
-            let tvar = env.new_tvar();
-            tparams.insert(*id, tvar.clone());
-            Box::from(tvar)
-        }).collect();
+        let tvars = adt_params
+            .map(|id| {
+                let tvar = env.new_tvar();
+                tparams.insert(*id, tvar.clone());
+                Box::from(tvar)
+            })
+            .collect();
 
         env.adt_type.insert(ty.id, Type::ADT(ty.id, tvars));
     }
 
     for (_, val) in &prog.type_table.values {
-        let args = val.args.iter().map(|arg| {
-            let arg_type = create_ident_type(arg, &mut env, &tparams);
-            Box::from(arg_type)
-        }).collect();
+        let args = val
+            .args
+            .iter()
+            .map(|arg| {
+                let arg_type = create_ident_type(arg, &mut env, &tparams);
+                Box::from(arg_type)
+            })
+            .collect();
         let out = env.adt_type.get(&val.data_type).expect("dangling adt id");
 
-        env.val_type.insert(val.id, Type::Func(args, Box::from(out.clone())));
+        env.val_type
+            .insert(val.id, Type::Func(args, Box::from(out.clone())));
     }
     env.flush_active_symbols();
 
@@ -225,7 +265,7 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
                 let stmt_type = apply(&subs, stmt_tvar);
                 env.insert_sym_type(tgt.val.id(), stmt_type);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -236,21 +276,22 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     Ok(env)
 }
 
-fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<na::TParamID, Type>) -> Type {
+fn create_ident_type(
+    ident: &na::TypeID,
+    env: &Environment,
+    tparams: &HashMap<na::TParamID, Type>,
+) -> Type {
     match ident {
-        na::TypeID::TParam(id) => {
-            tparams.get(id).expect("dangling tparam id").clone()
-        }
+        na::TypeID::TParam(id) => tparams.get(id).expect("dangling tparam id").clone(),
         na::TypeID::ADT(id, args) => {
-            let arg_types: Vec<Box<Type>> = args.iter().map(|arg| {
-                Box::from(create_ident_type(arg, env, tparams))
-            }).collect();
+            let arg_types: Vec<Box<Type>> = args
+                .iter()
+                .map(|arg| Box::from(create_ident_type(arg, env, tparams)))
+                .collect();
             //env.adt_type.get(id).expect("dangling type id").clone()
             Type::ADT(*id, arg_types)
         }
-        na::TypeID::Prim(s) => {
-            Type::Prim(s.clone())
-        }
+        na::TypeID::Prim(s) => Type::Prim(s.clone()),
     }
 }
 
@@ -278,8 +319,10 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, Spruce
                 }
                 Err(type_err) => {
                     return Err(SpruceErr {
-                        message: String::from("Function definiton incompatible with earlier function call"),
-                        info: type_err.info.clone()
+                        message: String::from(
+                            "Function definiton incompatible with earlier function call",
+                        ),
+                        info: type_err.info.clone(),
                     })
                 }
             };
@@ -294,7 +337,6 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, Spruce
     Ok(true)
 }
 
-
 fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, SpruceErr> {
     let mut subs = HashMap::new();
 
@@ -304,18 +346,19 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     env.apply_subs(&expr_subs);
     subs.extend(expr_subs);
 
-
     // start by analyzing patterns
     let mut pattern_type_id = None;
     for opt in &case.val.options {
-        let opt_pat_type_id = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
-            Type::Func(args, out) => {
-                match &**out {
-                    Type::ADT(id, _) => id,
-                    _ => unreachable!()
-                }
-            }
-            _ => unreachable!()
+        let opt_pat_type_id = match env
+            .val_type
+            .get(&opt.val.pattern.val.base)
+            .expect("dangling type id")
+        {
+            Type::Func(args, out) => match &**out {
+                Type::ADT(id, _) => id,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
         };
         match pattern_type_id {
             None => {
@@ -324,18 +367,25 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
             Some(pat_type_id) => {
                 if pat_type_id != *opt_pat_type_id {
                     return Err(SpruceErr {
-                        message: format!("case statement has patterns of both types {} and {}", pat_type_id, opt_pat_type_id),
-                        info: opt.val.pattern.info.clone()
-                    })
+                        message: format!(
+                            "case statement has patterns of both types {} and {}",
+                            pat_type_id, opt_pat_type_id
+                        ),
+                        info: opt.val.pattern.info.clone(),
+                    });
                 }
             }
         }
     }
 
-    let adt_type = env.adt_type.get(&pattern_type_id.expect("unreachable")).expect("dangling adt id").clone();
+    let adt_type = env
+        .adt_type
+        .get(&pattern_type_id.expect("unreachable"))
+        .expect("dangling adt id")
+        .clone();
     let (adt_id, adt_args) = match &adt_type {
         Type::ADT(id, args) => (id, args),
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     // we can't let the tvars of the acutal ADT "leak" to the arms. For reasons
@@ -350,16 +400,19 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let mut is_unit = false;
     let mut has_expr = false;
     for opt in &case.val.options {
-        let pattern_arg_types = match env.val_type.get(&opt.val.pattern.val.base).expect("dangling type id") {
+        let pattern_arg_types = match env
+            .val_type
+            .get(&opt.val.pattern.val.base)
+            .expect("dangling type id")
+        {
             Type::Func(args, _) => args.clone(),
-            _ => unreachable!()
+            _ => unreachable!(),
         };
 
         for (arg, pat_arg_type) in opt.val.pattern.val.args.iter().zip(pattern_arg_types) {
             let arg_type: Type = apply(&adt_tvar_subs, *pat_arg_type);
             env.insert_sym_type(*arg, arg_type);
         }
-
 
         match &opt.val.body.val {
             na::CaseBody::Body(body) => {
@@ -393,10 +446,9 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
         if has_expr {
             return Err(SpruceErr {
                 message: String::from("Case with expr must have type"),
-                info: case.info.clone()
+                info: case.info.clone(),
             });
-        }
-        else {
+        } else {
             let unit_subs = unify(ty, &Type::Unit, &case.info).expect("unreachable");
             subs.extend(unit_subs);
         }
@@ -410,30 +462,28 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
     let mut subs = HashMap::new();
     for stmt in &body.val.stmts {
         match &stmt.val {
-            na::Stmt::Assign(tgt, expr) => {
-                match &tgt.val {
-                    na::Target::Update(id) => {
-                        let sym_type = env.get_sym_type(id).expect("Dangling symbol id").clone();
-                        let stmt_subs = typecheck(env, expr, &sym_type)?;
-                        env.apply_subs(&stmt_subs);
+            na::Stmt::Assign(tgt, expr) => match &tgt.val {
+                na::Target::Update(id) => {
+                    let sym_type = env.get_sym_type(id).expect("Dangling symbol id").clone();
+                    let stmt_subs = typecheck(env, expr, &sym_type)?;
+                    env.apply_subs(&stmt_subs);
 
-                        let var_type = apply(&stmt_subs, sym_type);
-                        stmt_types.push(var_type);
-                        subs.extend(stmt_subs);
-                    }
-                    _ => {
-                        let new_tvar = env.new_tvar();
-                        let stmt_subs = typecheck(env, expr, &new_tvar)?;
-                        let var_type = apply(&stmt_subs, new_tvar);
-                        
-                        env.insert_sym_type(tgt.val.id(), var_type.clone());
-                        env.apply_subs(&stmt_subs);
-
-                        stmt_types.push(var_type);
-                        subs.extend(stmt_subs);
-                    }
+                    let var_type = apply(&stmt_subs, sym_type);
+                    stmt_types.push(var_type);
+                    subs.extend(stmt_subs);
                 }
-            }
+                _ => {
+                    let new_tvar = env.new_tvar();
+                    let stmt_subs = typecheck(env, expr, &new_tvar)?;
+                    let var_type = apply(&stmt_subs, new_tvar);
+
+                    env.insert_sym_type(tgt.val.id(), var_type.clone());
+                    env.apply_subs(&stmt_subs);
+
+                    stmt_types.push(var_type);
+                    subs.extend(stmt_subs);
+                }
+            },
             na::Stmt::Case(case) => {
                 let new_tvar = env.new_tvar();
                 let case_subs = check_case(env, case, &new_tvar)?;
@@ -447,10 +497,10 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
             // it's annoying that fn call doesn't carry a single expr; we
             // might want to make this change soon
             na::Stmt::FnCall(id, args) => {
-                let cloned_args = args.iter().map(|arg| { Box::from(arg.clone()) }).collect();
+                let cloned_args = args.iter().map(|arg| Box::from(arg.clone())).collect();
                 let fn_expr = na::ExprNode {
                     val: na::Expr::FnCall(id.clone(), cloned_args),
-                    info: stmt.info.clone()
+                    info: stmt.info.clone(),
                 };
 
                 let new_tvar = env.new_tvar();
@@ -500,8 +550,12 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
     println!("Typecheck {:?} and {:?}", expr.val, ty);
     let res = match &expr.val {
         na::Expr::Lit(_) => unify(ty, &int_prim!(), &expr.info),
-        na::Expr::Add(left, right) | na::Expr::Subt(left, right) | na::Expr::Mult(left, right) |
-        na::Expr::Div(left, right) | na::Expr::Pow(left, right) | na::Expr::Mod(left, right) => {
+        na::Expr::Add(left, right)
+        | na::Expr::Subt(left, right)
+        | na::Expr::Mult(left, right)
+        | na::Expr::Div(left, right)
+        | na::Expr::Pow(left, right)
+        | na::Expr::Mod(left, right) => {
             let mut subs = unify(ty, &int_prim!(), &expr.info)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
@@ -523,8 +577,10 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             subs.extend(subs2);
             Ok(subs)
         }
-        na::Expr::LtEq(left, right) | na::Expr::GtEq(left, right) | na::Expr::Lt(left, right) |
-        na::Expr::Gt(left, right) => {
+        na::Expr::LtEq(left, right)
+        | na::Expr::GtEq(left, right)
+        | na::Expr::Lt(left, right)
+        | na::Expr::Gt(left, right) => {
             let mut subs = unify(ty, &bool_adt!(env), &expr.info)?;
 
             let subs1 = typecheck(env, &*left, &int_prim!())?;
@@ -536,9 +592,7 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
 
         na::Expr::Id(id) => {
             match env.get_sym_type(&id) {
-                Some(sym_type) => {
-                    unify(ty, sym_type, &expr.info)
-                }
+                Some(sym_type) => unify(ty, sym_type, &expr.info),
                 // if we encounter an id without an id, make a tvar and keep
                 // going. we'll verify the type later when we check whatever
                 // the id refers to
@@ -623,21 +677,25 @@ fn refresh_tvars(env: &mut Environment, ty: &Type) -> TSubst {
 
 fn apply(subs: &TSubst, ty: Type) -> Type {
     match &ty {
-        Type::TVar(id) => {
-            match &subs.get(id) {
-                Some(sub_ty) => apply(subs, (**sub_ty).clone()),
-                None => ty
-            }
-        }
+        Type::TVar(id) => match &subs.get(id) {
+            Some(sub_ty) => apply(subs, (**sub_ty).clone()),
+            None => ty,
+        },
         Type::Unit => ty,
         Type::Prim(_) => ty,
         Type::ADT(id, params) => {
-            let new_params = params.iter().map(|p| { Box::from(apply(subs, (**p).clone())) }).collect();
+            let new_params = params
+                .iter()
+                .map(|p| Box::from(apply(subs, (**p).clone())))
+                .collect();
 
             Type::ADT(*id, new_params)
         }
         Type::Func(args, out) => {
-            let new_args = args.iter().map(|arg| { Box::from(apply(subs, (**arg).clone())) }).collect();
+            let new_args = args
+                .iter()
+                .map(|arg| Box::from(apply(subs, (**arg).clone())))
+                .collect();
 
             Type::Func(new_args, Box::from(apply(subs, (**out).clone())))
         }
@@ -650,8 +708,7 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
         (Type::TVar(id1), Type::TVar(id2)) => {
             if id1 == id2 {
                 Some(HashMap::new())
-            }
-            else {
+            } else {
                 Some(HashMap::from_iter(vec![(*id1, right.clone())]))
             }
         }
@@ -659,8 +716,7 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
         (Type::TVar(id), _) => {
             if tvars(right).contains(id) {
                 None
-            }
-            else {
+            } else {
                 Some(HashMap::from_iter(vec![(*id, right.clone())]))
             }
         }
@@ -668,8 +724,7 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
         (_, Type::TVar(id)) => {
             if tvars(left).contains(id) {
                 None
-            }
-            else {
+            } else {
                 Some(HashMap::from_iter(vec![(*id, left.clone())]))
             }
         }
@@ -677,8 +732,7 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
         (Type::Prim(p1), Type::Prim(p2)) => {
             if p1 == p2 {
                 Some(HashMap::new())
-            }
-            else {
+            } else {
                 None
             }
         }
@@ -687,37 +741,54 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
             if ty1 == ty2 {
                 let mut subs = HashMap::new();
                 for (tparam1, tparam2) in tparams1.iter().zip(tparams2) {
-                    let arg_subs = unify(&apply(&subs, *tparam1.clone()), &apply(&subs, *tparam2.clone()), info)?;
+                    let arg_subs = unify(
+                        &apply(&subs, *tparam1.clone()),
+                        &apply(&subs, *tparam2.clone()),
+                        info,
+                    )?;
                     subs.extend(arg_subs);
                 }
 
                 Some(subs)
-            }
-            else {
+            } else {
                 None
             }
         }
         (Type::Func(args1, out1), Type::Func(args2, out2)) => {
             if args1.len() != args2.len() {
                 None
-            }
-            else {
+            } else {
                 let mut subs = HashMap::new();
                 for (arg1, arg2) in args1.iter().zip(args2) {
-                    let arg_subs = unify(&apply(&subs, *arg1.clone()), &apply(&subs, *arg2.clone()), info)?;
+                    let arg_subs = unify(
+                        &apply(&subs, *arg1.clone()),
+                        &apply(&subs, *arg2.clone()),
+                        info,
+                    )?;
                     subs.extend(arg_subs);
                 }
 
-                let out_subs = unify(&apply(&subs, *out1.clone()), &apply(&subs, *out2.clone()), info)?;
+                let out_subs = unify(
+                    &apply(&subs, *out1.clone()),
+                    &apply(&subs, *out2.clone()),
+                    info,
+                )?;
                 subs.extend(out_subs);
 
                 Some(subs)
             }
-
         }
 
-        _ => None
-    }.ok_or(SpruceErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
+        _ => None,
+    }
+    .ok_or(SpruceErr {
+        message: format!(
+            "Unification failed between {} and {}",
+            left.as_str_debug(),
+            right.as_str_debug()
+        ),
+        info: info.clone(),
+    })
 }
 
 fn tvars(ty: &Type) -> HashSet<TVarID> {
@@ -745,7 +816,6 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
     }
 }
 
-
 #[test]
 fn func_tvars() {
     let ty = Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(1)));
@@ -756,7 +826,10 @@ fn func_tvars() {
 
 #[test]
 fn unify_prim() {
-    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+    let test_info = NodeInfo {
+        span: Span { start: 0, end: 0 },
+        file: String::from(""),
+    };
 
     let res = unify(&int_prim!(), &int_prim!(), &test_info);
     assert_eq!(res.is_ok(), true);
@@ -767,41 +840,62 @@ fn unify_prim() {
 
 #[test]
 fn unify_fn() {
-    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+    let test_info = NodeInfo {
+        span: Span { start: 0, end: 0 },
+        file: String::from(""),
+    };
 
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
         &Type::Func(vec![Box::from(int_prim!())], Box::from(int_prim!())),
-        &test_info
+        &test_info,
     );
     assert_eq!(res.is_ok(), true);
     assert_eq!(*res.expect("").get(&0).expect(""), int_prim!());
 
     let res = unify(
         &Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::TVar(0))),
-        &Type::Func(vec![Box::from(int_prim!())], Box::from(Type::ADT(0, vec![]))),
-        &test_info
+        &Type::Func(
+            vec![Box::from(int_prim!())],
+            Box::from(Type::ADT(0, vec![])),
+        ),
+        &test_info,
     );
     assert_eq!(res.is_ok(), false);
 }
 
-
 // verify that typecheck(Just(0), Maybe(Bool)) fails
 #[test]
 fn typecheck_adt() {
-    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
-    let test_it = na::InternalTypes {bool_id: 0, maybe_id: 1, list_id: 2, cons_id: 0, nil_id: 1};
+    let test_info = NodeInfo {
+        span: Span { start: 0, end: 0 },
+        file: String::from(""),
+    };
+    let test_it = na::InternalTypes {
+        bool_id: 0,
+        maybe_id: 1,
+        list_id: 2,
+        cons_id: 0,
+        nil_id: 1,
+    };
 
     let mut env = Environment::new(test_it);
-    env.val_type.insert(0, Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))]))));
+    env.val_type.insert(
+        0,
+        Type::Func(
+            vec![Box::from(Type::TVar(0))],
+            Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))])),
+        ),
+    );
     let expr = na::ExprNode {
-        val: na::Expr::ADTVal(0, vec![
-            Box::from(na::ExprNode {
+        val: na::Expr::ADTVal(
+            0,
+            vec![Box::from(na::ExprNode {
                 val: na::Expr::Lit(0.0),
-                info: test_info.clone()
-            })
-        ]),
-        info: test_info.clone()
+                info: test_info.clone(),
+            })],
+        ),
+        info: test_info.clone(),
     };
 
     let res = typecheck(

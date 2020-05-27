@@ -10,23 +10,22 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-use crate::error::{SpruceErr};
+use crate::error::SpruceErr;
 
 use crate::parser;
-use crate::parser::{NodeInfo};
-
+use crate::parser::NodeInfo;
 
 fn double_decl(name: &String, info: NodeInfo) -> SpruceErr {
-    SpruceErr{
+    SpruceErr {
         message: String::from(format!("'{}' declared twice", name)),
-        info: info
+        info: info,
     }
 }
 
 fn undeclared(name: &String, info: NodeInfo) -> SpruceErr {
-    SpruceErr{
+    SpruceErr {
         message: String::from(format!("'{}' used but not declared", name)),
-        info: info
+        info: info,
     }
 }
 
@@ -53,107 +52,106 @@ pub enum Expr {
 #[derive(Debug, PartialEq, Clone)]
 pub struct ExprNode {
     pub val: Expr,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Body {
     pub stmts: Vec<StmtNode>,
-    pub expr: Option<ExprNode>
+    pub expr: Option<ExprNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct BodyNode {
     pub val: Body,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Case {
     pub id: CaseID,
     pub expr: ExprNode,
-    pub options: Vec<CaseOptionNode>
+    pub options: Vec<CaseOptionNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseNode {
     pub val: Case,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CasePattern {
     pub base: ADTValID,
-    pub args: Vec<SymbolID> 
+    pub args: Vec<SymbolID>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CasePatternNode {
     pub val: CasePattern,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseOption {
     pub pattern: CasePatternNode,
-    pub body: CaseBodyNode
+    pub body: CaseBodyNode,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseOptionNode {
     pub val: CaseOption,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum CaseBody {
     Expr(ExprNode),
-    Body(BodyNode)
+    Body(BodyNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CaseBodyNode {
     pub val: CaseBody,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Valued {
     Expr(ExprNode),
-    Case(CaseNode)
+    Case(CaseNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ValuedNode {
     pub val: Valued,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Stmt {
     Assign(TargetNode, ExprNode),
     FnCall(SymbolID, Vec<ExprNode>),
-    Case(CaseNode)
+    Case(CaseNode),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct StmtNode {
     pub val: Stmt,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub enum Target {
     Var(SymbolID),
     Mutable(SymbolID),
-    Update(SymbolID)
+    Update(SymbolID),
 }
 
 impl Target {
     pub fn id(&self) -> SymbolID {
         match self {
-            Target::Var(id) | Target::Mutable(id) |
-            Target::Update(id) => id.clone()
+            Target::Var(id) | Target::Mutable(id) | Target::Update(id) => id.clone(),
         }
     }
 }
@@ -161,44 +159,44 @@ impl Target {
 #[derive(Debug, PartialEq)]
 pub struct TargetNode {
     pub val: Target,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Type {
     pub name: String,
-    pub options: Vec<TypeOptionNode>
+    pub options: Vec<TypeOptionNode>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeNode {
     pub val: Type,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeOption {
     pub name: String,
-    pub args: Vec<String>
+    pub args: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
     pub args: Vec<SymbolID>,
-    pub body: BodyNode
+    pub body: BodyNode,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct FuncNode {
     pub val: Func,
-    pub info: NodeInfo
+    pub info: NodeInfo,
 }
 
 // exists to record types of adts and values we need in codegen
@@ -209,7 +207,7 @@ pub struct InternalTypes {
 
     pub list_id: ADTID,
     pub cons_id: ADTValID,
-    pub nil_id: ADTValID
+    pub nil_id: ADTValID,
 }
 
 #[derive(Debug, PartialEq)]
@@ -219,9 +217,8 @@ pub struct Prog {
     pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
     pub type_table: TypeTableExt,
-    pub internal_types: InternalTypes
+    pub internal_types: InternalTypes,
 }
-
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     let (types, type_table) = analyze_types(&prog)?;
@@ -236,24 +233,39 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
         funcs.push(check_function(&mut sym_table, &type_table, func, id)?);
     }
-    
+
     sym_table.pop_layer();
 
     let internal_types = InternalTypes {
-        bool_id: type_table.get_type(&String::from("Bool")).expect("Could not find Bool id").id,
-        maybe_id: type_table.get_type(&String::from("Maybe")).expect("Could not find Maybe id").id,
-        list_id: type_table.get_type(&String::from("List")).expect("Could not find List id").id,
-        cons_id: type_table.get_value(&String::from("Cons")).expect("Could not find Cons id").id,
-        nil_id: type_table.get_value(&String::from("Nil")).expect("Could not find Nil id").id,
+        bool_id: type_table
+            .get_type(&String::from("Bool"))
+            .expect("Could not find Bool id")
+            .id,
+        maybe_id: type_table
+            .get_type(&String::from("Maybe"))
+            .expect("Could not find Maybe id")
+            .id,
+        list_id: type_table
+            .get_type(&String::from("List"))
+            .expect("Could not find List id")
+            .id,
+        cons_id: type_table
+            .get_value(&String::from("Cons"))
+            .expect("Could not find Cons id")
+            .id,
+        nil_id: type_table
+            .get_value(&String::from("Nil"))
+            .expect("Could not find Nil id")
+            .id,
     };
 
     let out_prog = Prog {
-        functions: funcs, 
+        functions: funcs,
         definitions: defs,
         types: types,
         symbol_table: sym_table,
         type_table: type_table.to_ext(),
-        internal_types: internal_types
+        internal_types: internal_types,
     };
     Ok(out_prog)
 }
@@ -265,14 +277,14 @@ pub type CaseID = u32;
 pub enum SymbolType {
     Const,
     Mutable,
-    Function
+    Function,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Symbol {
     pub id: SymbolID,
     pub name: String,
-    pub sym_type: SymbolType
+    pub sym_type: SymbolType,
 }
 
 type SymbolLayer = HashMap<String, Symbol>;
@@ -282,12 +294,17 @@ pub struct SymbolTable {
     next_id: SymbolID,
     next_case_id: CaseID,
     layers: Vec<SymbolLayer>,
-    pub store: HashMap<SymbolID, Symbol>
+    pub store: HashMap<SymbolID, Symbol>,
 }
 
 impl SymbolTable {
     fn new() -> Self {
-        SymbolTable { next_id: 0, next_case_id: 0, layers: vec![], store: HashMap::new() }
+        SymbolTable {
+            next_id: 0,
+            next_case_id: 0,
+            layers: vec![],
+            store: HashMap::new(),
+        }
     }
 
     fn push_layer(&mut self) {
@@ -311,7 +328,11 @@ impl SymbolTable {
 
         let id = self.next_id;
         let ret = self.layers.last_mut().and_then(|layer| {
-            let symbol = Symbol { id: id, name: name.clone(), sym_type: sym_type };
+            let symbol = Symbol {
+                id: id,
+                name: name.clone(),
+                sym_type: sym_type,
+            };
             layer.insert(name.clone(), symbol);
             Some(id)
         });
@@ -326,7 +347,7 @@ impl SymbolTable {
                 Some(sym) => {
                     return Option::Some(sym);
                 }
-                None => ()
+                None => (),
             }
         }
 
@@ -355,7 +376,9 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
+fn collect_decls(
+    prog: &parser::Prog,
+) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
@@ -364,64 +387,80 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
         if table.conflicts(&func.val.name) {
             return Err(double_decl(&func.val.name, func.info.clone()));
         }
-        let id = table.attempt_insert(&func.val.name, SymbolType::Function).expect("unreachable");
+        let id = table
+            .attempt_insert(&func.val.name, SymbolType::Function)
+            .expect("unreachable");
         fn_ids.push(id);
     }
 
     let mut tgts = Vec::new();
     for var in &prog.definitions {
         let tgt_val = match &var.val {
-            parser::Stmt::Assign(tgt, _) => {
-                match &tgt.val {
-                    parser::Target::Var(name) => {
-                        if table.conflicts(name) {
-                            return Err(double_decl(name, tgt.info.clone()));
-                        }
-                        let id = table.attempt_insert(name, SymbolType::Const).expect("unreachable");
-                        Target::Var(id)
+            parser::Stmt::Assign(tgt, _) => match &tgt.val {
+                parser::Target::Var(name) => {
+                    if table.conflicts(name) {
+                        return Err(double_decl(name, tgt.info.clone()));
                     }
-                    parser::Target::Mutable(name) => {
-                        if table.conflicts(name) {
-                            return Err(double_decl(name, tgt.info.clone()));
-                        }
-                        let id = table.attempt_insert(name, SymbolType::Mutable).expect("unreachable");
-                        Target::Mutable(id)
-                    }
-                    parser::Target::Update(_) => {
-                        return Err(SpruceErr {
-                            message: String::from(format!("Updates not allowed in program level-statements")),
-                            info: var.info.clone()
-                        });
-                    }
+                    let id = table
+                        .attempt_insert(name, SymbolType::Const)
+                        .expect("unreachable");
+                    Target::Var(id)
                 }
-            }
-            _ => unreachable!()
+                parser::Target::Mutable(name) => {
+                    if table.conflicts(name) {
+                        return Err(double_decl(name, tgt.info.clone()));
+                    }
+                    let id = table
+                        .attempt_insert(name, SymbolType::Mutable)
+                        .expect("unreachable");
+                    Target::Mutable(id)
+                }
+                parser::Target::Update(_) => {
+                    return Err(SpruceErr {
+                        message: String::from(format!(
+                            "Updates not allowed in program level-statements"
+                        )),
+                        info: var.info.clone(),
+                    });
+                }
+            },
+            _ => unreachable!(),
         };
 
         tgts.push(TargetNode {
             val: tgt_val,
-            info: var.info.clone()
+            info: var.info.clone(),
         });
     }
-    
+
     Ok((table, fn_ids, tgts))
 }
 
-fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, SpruceErr> {
+fn check_global(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    stmt: &parser::StmtNode,
+    tgt: TargetNode,
+) -> Result<StmtNode, SpruceErr> {
     match &stmt.val {
         parser::Stmt::Assign(_, expr) => {
             let new_expr = check_expr(table, types, expr)?;
 
             Ok(StmtNode {
                 val: Stmt::Assign(tgt, new_expr),
-                info: stmt.info.clone()
+                info: stmt.info.clone(),
             })
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     }
 }
 
-fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
+fn check_function(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    func: &parser::FuncNode,
+    id: SymbolID,
+) -> Result<FuncNode, SpruceErr> {
     table.push_layer();
 
     let mut arg_symbols = Vec::new();
@@ -442,12 +481,20 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
     table.pop_layer();
 
     Ok(FuncNode {
-        val: Func {name: id, args: arg_symbols, body: body},
-        info: func.info.clone()
+        val: Func {
+            name: id,
+            args: arg_symbols,
+            body: body,
+        },
+        info: func.info.clone(),
     })
 }
 
-fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNode) -> Result<BodyNode, SpruceErr> {
+fn check_body(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    body: &parser::BodyNode,
+) -> Result<BodyNode, SpruceErr> {
     let mut stmts = Vec::new();
     for stmt in &body.val.stmts {
         stmts.push(check_stmt(table, types, stmt)?);
@@ -455,16 +502,23 @@ fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNod
 
     let expr = match &body.val.expr {
         Some(e) => Some(check_expr(table, types, &e)?),
-        None => None
+        None => None,
     };
 
     Ok(BodyNode {
-        val: Body {stmts: stmts, expr: expr},
-        info: body.info.clone()
+        val: Body {
+            stmts: stmts,
+            expr: expr,
+        },
+        info: body.info.clone(),
     })
 }
 
-fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode) -> Result<StmtNode, SpruceErr> {
+fn check_stmt(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    stmt: &parser::StmtNode,
+) -> Result<StmtNode, SpruceErr> {
     let stmt_val = match &stmt.val {
         parser::Stmt::Assign(tgt, expr) => {
             let new_tgt = check_target(table, tgt)?;
@@ -483,62 +537,73 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
             }
 
             Stmt::Case(CaseNode {
-                val: Case {id: id, expr: expr, options: options},
-                info: case.info.clone()
+                val: Case {
+                    id: id,
+                    expr: expr,
+                    options: options,
+                },
+                info: case.info.clone(),
             })
         }
-        parser::Stmt::FnCall(name, args) => {
-            match table.lookup(&name) {
-                Some(sym) => {
-                    let mut checked_args = Vec::new();
-                    for arg in args {
-                        let checked = check_expr(table, types, &arg)?;
-                        checked_args.push(checked);
-                    }
+        parser::Stmt::FnCall(name, args) => match table.lookup(&name) {
+            Some(sym) => {
+                let mut checked_args = Vec::new();
+                for arg in args {
+                    let checked = check_expr(table, types, &arg)?;
+                    checked_args.push(checked);
+                }
 
-                    Stmt::FnCall(sym.id, checked_args)
-                }
-                None => {
-                    return Err(undeclared(name, stmt.info.clone()));
-                }
+                Stmt::FnCall(sym.id, checked_args)
             }
-        }
+            None => {
+                return Err(undeclared(name, stmt.info.clone()));
+            }
+        },
     };
 
     Ok(StmtNode {
         val: stmt_val,
-        info: stmt.info.clone()
+        info: stmt.info.clone(),
     })
 }
 
-fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOptionNode) -> Result<CaseOptionNode, SpruceErr> {
+fn check_case_option(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    opt: &parser::CaseOptionNode,
+) -> Result<CaseOptionNode, SpruceErr> {
     table.push_layer();
     let pattern = check_case_pattern(table, types, &opt.val.pattern)?;
     let body_val = match &opt.val.body.val {
         parser::CaseBody::Body(body) => CaseBody::Body(check_body(table, types, &body)?),
-        parser::CaseBody::Expr(expr) => CaseBody::Expr(check_expr(table, types, &expr)?)
+        parser::CaseBody::Expr(expr) => CaseBody::Expr(check_expr(table, types, &expr)?),
     };
     let body = CaseBodyNode {
         val: body_val,
-        info: opt.val.body.info.clone()
+        info: opt.val.body.info.clone(),
     };
     table.pop_layer();
 
     Ok(CaseOptionNode {
-        val: CaseOption {pattern: pattern, body: body },
-        info: opt.info.clone()
+        val: CaseOption {
+            pattern: pattern,
+            body: body,
+        },
+        info: opt.info.clone(),
     })
 }
 
-fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePatternNode) -> Result<CasePatternNode, SpruceErr> {
+fn check_case_pattern(
+    table: &mut SymbolTable,
+    types: &TypeTable,
+    pattern: &parser::CasePatternNode,
+) -> Result<CasePatternNode, SpruceErr> {
     let id = match types.get_value(&pattern.val.base) {
-        Some(val) => {
-            val.id
-        }
+        Some(val) => val.id,
         None => {
             return Err(SpruceErr {
                 message: String::from(format!("'{}' is not an ADT value", pattern.val.base)),
-                info: pattern.info.clone()
+                info: pattern.info.clone(),
             });
         }
     };
@@ -556,67 +621,72 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
         }
     }
 
-
     Ok(CasePatternNode {
-        val: CasePattern {base: id, args: arg_symbols},
-        info: pattern.info.clone()
+        val: CasePattern {
+            base: id,
+            args: arg_symbols,
+        },
+        info: pattern.info.clone(),
     })
 }
 
-fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<TargetNode, SpruceErr> {
+fn check_target(
+    table: &mut SymbolTable,
+    tgt: &parser::TargetNode,
+) -> Result<TargetNode, SpruceErr> {
     let tgt_val = match &tgt.val {
         parser::Target::Var(name) => {
             let id_result = table.attempt_insert(name, SymbolType::Const);
             match id_result {
                 Some(id) => Ok(Target::Var(id)),
-                None => {
-                    Err(double_decl(name, tgt.info.clone()))
-                }
+                None => Err(double_decl(name, tgt.info.clone())),
             }
         }
         parser::Target::Mutable(name) => {
             let id_result = table.attempt_insert(&name, SymbolType::Mutable);
             match id_result {
                 Some(id) => Ok(Target::Mutable(id)),
-                None => Err(double_decl(name, tgt.info.clone()))
-
+                None => Err(double_decl(name, tgt.info.clone())),
             }
         }
         parser::Target::Update(name) => {
             let sym_result = table.lookup(&name);
             match sym_result {
-                Some(sym) => {
-                    match sym.sym_type {
-                        SymbolType::Mutable => Ok(Target::Update(sym.id)),
-                        _ => Err(SpruceErr {
-                            message: String::from(format!("attempt to update non-mutable '{}'", name)),
-                            info: tgt.info.clone()
-                        })
-                    }
-                }
+                Some(sym) => match sym.sym_type {
+                    SymbolType::Mutable => Ok(Target::Update(sym.id)),
+                    _ => Err(SpruceErr {
+                        message: String::from(format!("attempt to update non-mutable '{}'", name)),
+                        info: tgt.info.clone(),
+                    }),
+                },
                 None => Err(SpruceErr {
-                    message: String::from(format!("'{}' not declared before attempting update", name)),
-                    info: tgt.info.clone()
-                })
+                    message: String::from(format!(
+                        "'{}' not declared before attempting update",
+                        name
+                    )),
+                    info: tgt.info.clone(),
+                }),
             }
         }
     }?;
 
     Ok(TargetNode {
         val: tgt_val,
-        info: tgt.info.clone()
+        info: tgt.info.clone(),
     })
 }
 
-fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -> Result<ExprNode, SpruceErr> {
+fn check_expr(
+    table: &SymbolTable,
+    types: &TypeTable,
+    expr: &parser::ExprNode,
+) -> Result<ExprNode, SpruceErr> {
     let expr_val = match &expr.val {
-        parser::Expr::Id(name) => {
-            match (table.lookup(&name), types.get_value(&name)) {
-                (Some(sym), _) => Ok(Expr::Id(sym.id)),
-                (_, Some(val)) => Ok(Expr::ADTVal(val.id, vec![])),
-                (None, None) => Err(undeclared(name, expr.info.clone()))
-            }
-        }
+        parser::Expr::Id(name) => match (table.lookup(&name), types.get_value(&name)) {
+            (Some(sym), _) => Ok(Expr::Id(sym.id)),
+            (_, Some(val)) => Ok(Expr::ADTVal(val.id, vec![])),
+            (None, None) => Err(undeclared(name, expr.info.clone())),
+        },
 
         parser::Expr::Lit(val) => Ok(Expr::Lit(*val)),
 
@@ -683,7 +753,6 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
 
         parser::Expr::FnCall(fn_name, args) => {
             match (table.lookup(&fn_name), types.get_value(&fn_name)) {
-
                 (Some(sym), _) => {
                     let mut checked_args = Vec::new();
                     for arg in args {
@@ -709,13 +778,11 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
                 }
             }
         }
-
-
     }?;
 
     Ok(ExprNode {
         val: expr_val,
-        info: expr.info.clone()
+        info: expr.info.clone(),
     })
 }
 
@@ -726,7 +793,7 @@ pub type TParamID = u32;
 #[derive(Debug, PartialEq)]
 pub struct TParam {
     pub id: TParamID,
-    pub name: String
+    pub name: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -741,14 +808,14 @@ pub struct ADTValue {
     pub id: ADTValID,
     pub name: String,
     pub args: Vec<TypeID>,
-    pub data_type: ADTID
+    pub data_type: ADTID,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct ADT {
     pub id: ADTID,
     pub type_params: Vec<TParamID>,
-    pub name: String
+    pub name: String,
 }
 
 #[derive(Debug, PartialEq)]
@@ -759,7 +826,7 @@ struct TypeTable {
     primitives: HashSet<String>,
     types: HashMap<String, ADT>,
     values: HashMap<String, ADTValue>,
-    type_params: HashMap<TParamID, TParam>
+    type_params: HashMap<TParamID, TParam>,
 }
 
 /// Version of type table that is exported. Note that values are indexed by
@@ -768,13 +835,17 @@ struct TypeTable {
 pub struct TypeTableExt {
     pub types: HashMap<ADTID, ADT>,
     pub values: HashMap<ADTValID, ADTValue>,
-    pub primitives: HashSet<String>
+    pub primitives: HashSet<String>,
 }
 
 impl TypeTable {
     fn new() -> Self {
         // TODO: figure out the proper way to do this in rust
-        let primitives = vec![String::from("Int"), String::from("Float"), String::from("Char")];
+        let primitives = vec![
+            String::from("Int"),
+            String::from("Float"),
+            String::from("Char"),
+        ];
 
         TypeTable {
             next_type_id: 0,
@@ -783,12 +854,16 @@ impl TypeTable {
             primitives: HashSet::from_iter(primitives),
             types: HashMap::default(),
             values: HashMap::default(),
-            type_params: HashMap::default()
+            type_params: HashMap::default(),
         }
     }
 
     fn add_type(&mut self, name: &String, params: Vec<TParamID>) {
-        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params};
+        let new_adt = ADT {
+            name: name.clone(),
+            id: self.next_type_id,
+            type_params: params,
+        };
         self.next_type_id += 1;
         self.types.insert(name.clone(), new_adt);
     }
@@ -797,16 +872,24 @@ impl TypeTable {
         let mut r = self.types.get_mut(data_type);
         match r {
             Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
+                let new_val = ADTValue {
+                    name: name.clone(),
+                    args: (*args).clone(),
+                    data_type: adt.id,
+                    id: self.next_val_id,
+                };
                 self.next_val_id += 1;
                 self.values.insert(new_val.name.clone(), new_val);
             }
-            None => unreachable!()
+            None => unreachable!(),
         }
     }
 
     fn add_tparam(&mut self, name: &String) -> TParamID {
-        let new_tparam = TParam {name: name.clone(), id: self.next_tparam_id};
+        let new_tparam = TParam {
+            name: name.clone(),
+            id: self.next_tparam_id,
+        };
         self.next_tparam_id += 1;
         self.type_params.insert(new_tparam.id, new_tparam);
 
@@ -828,34 +911,37 @@ impl TypeTable {
     fn has_type(&self, name: &String) -> bool {
         self.types.contains_key(name) || self.primitives.contains(name)
     }
-    
+
     fn has_value(&self, name: &String) -> bool {
         self.values.contains_key(name)
     }
 
     fn to_ext(self) -> TypeTableExt {
         TypeTableExt {
-            types: self.types.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
-            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
-            primitives: self.primitives
+            types: self.types.into_iter().map(|(k, v)| (v.id, v)).collect(),
+            values: self.values.into_iter().map(|(k, v)| (v.id, v)).collect(),
+            primitives: self.primitives,
         }
     }
 }
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), SpruceErr>{
+fn analyze_types(prog: &parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), SpruceErr> {
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
         if type_table.has_type(&t.val.name) {
-            return Err(double_decl(&t.val.name, t.info.clone()))
+            return Err(double_decl(&t.val.name, t.info.clone()));
         }
 
         if !t.val.name.chars().next().unwrap().is_uppercase() {
             return Err(SpruceErr {
-                message: String::from(format!("{} is an invalid type name: types must be uppercase", t.val.name)),
-                info: t.info.clone()
+                message: String::from(format!(
+                    "{} is an invalid type name: types must be uppercase",
+                    t.val.name
+                )),
+                info: t.info.clone(),
             });
         }
 
@@ -869,65 +955,80 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Spr
 
     for t in &prog.types {
         let type_symbol = type_table.get_type(&t.val.name).expect("unreachable");
-        let params: HashMap<String, TParamID> = type_symbol.type_params.iter().map(|id| {
-            let tparam = type_table.get_tparam(id).expect("unreachable");
-            (tparam.name.clone(), tparam.id)
-        }).collect();
+        let params: HashMap<String, TParamID> = type_symbol
+            .type_params
+            .iter()
+            .map(|id| {
+                let tparam = type_table.get_tparam(id).expect("unreachable");
+                (tparam.name.clone(), tparam.id)
+            })
+            .collect();
 
         for v in &t.val.options {
             if type_table.has_value(&v.val.name) {
-                return Err(double_decl(&v.val.name, v.info.clone()))
+                return Err(double_decl(&v.val.name, v.info.clone()));
             }
 
             let mut arg_ids = Vec::new();
             for arg in &v.val.args {
-                arg_ids.push(
-                    check_type_identifier(arg, &params, &type_table, &v.info)?
-                );
+                arg_ids.push(check_type_identifier(arg, &params, &type_table, &v.info)?);
             }
 
             type_table.add_value(&v.val.name, &arg_ids, &t.val.name);
         }
     }
 
-    let new_types = prog.types.iter().map(|t| {
-        TypeNode {
+    let new_types = prog
+        .types
+        .iter()
+        .map(|t| TypeNode {
             val: Type {
                 name: t.val.name.clone(),
-                options: t.val.options.iter().map(|o| { 
-                    TypeOptionNode {
-                        val: TypeOption {name: o.val.name.clone(), args: o.val.args.iter().map(|id| {id.name.clone()}).collect() },
-                        info: o.info.clone()
-                    }
-                }).collect()
+                options: t
+                    .val
+                    .options
+                    .iter()
+                    .map(|o| TypeOptionNode {
+                        val: TypeOption {
+                            name: o.val.name.clone(),
+                            args: o.val.args.iter().map(|id| id.name.clone()).collect(),
+                        },
+                        info: o.info.clone(),
+                    })
+                    .collect(),
             },
-            info: t.info.clone()
-        }
-    }).collect();
+            info: t.info.clone(),
+        })
+        .collect();
 
     Ok((new_types, type_table))
 }
 
-fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, SpruceErr> {
+fn check_type_identifier(
+    ident: &parser::TypeIdentifier,
+    params: &HashMap<String, TParamID>,
+    type_table: &TypeTable,
+    info: &NodeInfo,
+) -> Result<TypeID, SpruceErr> {
     let mut args = Vec::new();
     for arg in &ident.args {
-        args.push(Box::from(check_type_identifier(&**arg, params, type_table, &info)?));
+        args.push(Box::from(check_type_identifier(
+            &**arg, params, type_table, &info,
+        )?));
     }
 
-    match (params.get(&ident.name), type_table.types.get(&ident.name), type_table.primitives.get(&ident.name)) {
-        (Some(tparam_id), _, _) => {
-            Ok(TypeID::TParam(*tparam_id))
-        }
-        (_, Some(adt), _) => {
-            Ok(TypeID::ADT(adt.id, args))
-        }
-        (_, _, Some(s)) => {
-            Ok(TypeID::Prim(s.clone()))
-        }
+    match (
+        params.get(&ident.name),
+        type_table.types.get(&ident.name),
+        type_table.primitives.get(&ident.name),
+    ) {
+        (Some(tparam_id), _, _) => Ok(TypeID::TParam(*tparam_id)),
+        (_, Some(adt), _) => Ok(TypeID::ADT(adt.id, args)),
+        (_, _, Some(s)) => Ok(TypeID::Prim(s.clone())),
         _ => {
             return Err(SpruceErr {
                 message: String::from(format!("type does not exist: {}", ident.name)),
-                info: info.clone()
+                info: info.clone(),
             });
         }
     }
