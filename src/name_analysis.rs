@@ -10,21 +10,21 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 
-use crate::error::{NameErr};
+use crate::error::{SpruceErr};
 
 use crate::parser;
 use crate::parser::{NodeInfo};
 
 
-fn double_decl(name: &String, info: NodeInfo) -> NameErr {
-    NameErr{
+fn double_decl(name: &String, info: NodeInfo) -> SpruceErr {
+    SpruceErr{
         message: String::from(format!("'{}' declared twice", name)),
         info: info
     }
 }
 
-fn undeclared(name: &String, info: NodeInfo) -> NameErr {
-    NameErr{
+fn undeclared(name: &String, info: NodeInfo) -> SpruceErr {
+    SpruceErr{
         message: String::from(format!("'{}' used but not declared", name)),
         info: info
     }
@@ -182,12 +182,6 @@ pub struct TypeOption {
     pub args: Vec<String>
 }
 
-/*#[derive(Debug, PartialEq)]
-pub struct TypeIdentifier {
-    pub name: String,
-    pub args: Vec<Box<TypeIdentifier>>
-}*/
-
 #[derive(Debug, PartialEq)]
 pub struct TypeOptionNode {
     pub val: TypeOption,
@@ -229,7 +223,7 @@ pub struct Prog {
 }
 
 
-pub fn name_analysis(prog: parser::Prog) -> Result<Prog, NameErr> {
+pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     let (types, type_table) = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
@@ -361,7 +355,7 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), NameErr> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
@@ -394,7 +388,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
                         Target::Mutable(id)
                     }
                     parser::Target::Update(_) => {
-                        return Err(NameErr {
+                        return Err(SpruceErr {
                             message: String::from(format!("Updates not allowed in program level-statements")),
                             info: var.info.clone()
                         });
@@ -413,7 +407,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
     Ok((table, fn_ids, tgts))
 }
 
-fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, NameErr> {
+fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, SpruceErr> {
     match &stmt.val {
         parser::Stmt::Assign(_, expr) => {
             let new_expr = check_expr(table, types, expr)?;
@@ -427,7 +421,7 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
     }
 }
 
-fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, NameErr> {
+fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
     table.push_layer();
 
     let mut arg_symbols = Vec::new();
@@ -453,7 +447,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
     })
 }
 
-fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNode) -> Result<BodyNode, NameErr> {
+fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNode) -> Result<BodyNode, SpruceErr> {
     let mut stmts = Vec::new();
     for stmt in &body.val.stmts {
         stmts.push(check_stmt(table, types, stmt)?);
@@ -470,7 +464,7 @@ fn check_body(table: &mut SymbolTable, types: &TypeTable, body: &parser::BodyNod
     })
 }
 
-fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode) -> Result<StmtNode, NameErr> {
+fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode) -> Result<StmtNode, SpruceErr> {
     let stmt_val = match &stmt.val {
         parser::Stmt::Assign(tgt, expr) => {
             let new_tgt = check_target(table, tgt)?;
@@ -517,7 +511,7 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
     })
 }
 
-fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOptionNode) -> Result<CaseOptionNode, NameErr> {
+fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::CaseOptionNode) -> Result<CaseOptionNode, SpruceErr> {
     table.push_layer();
     let pattern = check_case_pattern(table, types, &opt.val.pattern)?;
     let body_val = match &opt.val.body.val {
@@ -536,13 +530,13 @@ fn check_case_option(table: &mut SymbolTable, types: &TypeTable, opt: &parser::C
     })
 }
 
-fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePatternNode) -> Result<CasePatternNode, NameErr> {
+fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &parser::CasePatternNode) -> Result<CasePatternNode, SpruceErr> {
     let id = match types.get_value(&pattern.val.base) {
         Some(val) => {
             val.id
         }
         None => {
-            return Err(NameErr {
+            return Err(SpruceErr {
                 message: String::from(format!("'{}' is not an ADT value", pattern.val.base)),
                 info: pattern.info.clone()
             });
@@ -569,7 +563,7 @@ fn check_case_pattern(table: &mut SymbolTable, types: &TypeTable, pattern: &pars
     })
 }
 
-fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<TargetNode, NameErr> {
+fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<TargetNode, SpruceErr> {
     let tgt_val = match &tgt.val {
         parser::Target::Var(name) => {
             let id_result = table.attempt_insert(name, SymbolType::Const);
@@ -594,13 +588,13 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
                 Some(sym) => {
                     match sym.sym_type {
                         SymbolType::Mutable => Ok(Target::Update(sym.id)),
-                        _ => Err(NameErr {
+                        _ => Err(SpruceErr {
                             message: String::from(format!("attempt to update non-mutable '{}'", name)),
                             info: tgt.info.clone()
                         })
                     }
                 }
-                None => Err(NameErr {
+                None => Err(SpruceErr {
                     message: String::from(format!("'{}' not declared before attempting update", name)),
                     info: tgt.info.clone()
                 })
@@ -614,7 +608,7 @@ fn check_target(table: &mut SymbolTable, tgt: &parser::TargetNode) -> Result<Tar
     })
 }
 
-fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -> Result<ExprNode, NameErr> {
+fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -> Result<ExprNode, SpruceErr> {
     let expr_val = match &expr.val {
         parser::Expr::Id(name) => {
             match (table.lookup(&name), types.get_value(&name)) {
@@ -850,7 +844,7 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), NameErr>{
+fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), SpruceErr>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
@@ -859,7 +853,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
         }
 
         if !t.val.name.chars().next().unwrap().is_uppercase() {
-            return Err(NameErr {
+            return Err(SpruceErr {
                 message: String::from(format!("{} is an invalid type name: types must be uppercase", t.val.name)),
                 info: t.info.clone()
             });
@@ -914,7 +908,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Nam
     Ok((new_types, type_table))
 }
 
-fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, NameErr> {
+fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, SpruceErr> {
     let mut args = Vec::new();
     for arg in &ident.args {
         args.push(Box::from(check_type_identifier(&**arg, params, type_table, &info)?));
@@ -931,7 +925,7 @@ fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String
             Ok(TypeID::Prim(s.clone()))
         }
         _ => {
-            return Err(NameErr {
+            return Err(SpruceErr {
                 message: String::from(format!("type does not exist: {}", ident.name)),
                 info: info.clone()
             });
