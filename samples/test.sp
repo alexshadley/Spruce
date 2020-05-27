@@ -1,9 +1,3 @@
-not(b) {
-    case b {
-        True -> False
-        False -> True
-    }
-}
 
 and(x, y) {
     case x {
@@ -17,25 +11,9 @@ and(x, y) {
     }
 }
 
-type Maybe {
-    Just(Int)
-    Nothing
-}
-
-map(maybe, fn) {
-    case maybe {
-        Just(n) -> Just(fn(n))
-        Nothing -> Nothing
-    }
-}
 
 inc(x) {
     x + 1
-}
-
-type List {
-    Cons(Int, List)
-    Nil
 }
 
 listMap(ls, fn) {

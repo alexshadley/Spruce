@@ -5,6 +5,8 @@ extern crate pest_derive;
 extern crate lazy_static;
 
 use std::fs;
+use std::env;
+use std::path::Path;
 use std::collections::HashMap;
 
 mod parser;
@@ -18,8 +20,12 @@ mod codegen;
 /// own IR, Type Checking simply emits a mapping from symbols to types, and
 /// Code Generation writes the compiled javascript to a file
 fn main() {
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let unparsed_file = fs::read_to_string("samples/lists.sp").expect("cannot read file");
+    let args: Vec<String> = env::args().collect();
+    let spruce_code: &String = &args[1];
+    let spruce_path = Path::new(spruce_code);
+
+    let prelude = fs::read_to_string("prelude.sp").expect("cannot read prelude");
+    let unparsed_file = fs::read_to_string(spruce_path).expect(&format!("Cannot find file {}", spruce_code));
     let files = vec![(prelude.as_str(), String::from("prelude")), (unparsed_file.as_str(), String::from("main"))];
 
     let (analyzed_prog, environment) = match compile(files.clone()){

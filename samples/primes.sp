@@ -1,13 +1,3 @@
-type Maybe(a) {
-    Just(a)
-    Nothing
-}
-
-type List(a) {
-    Cons(a, List(a))
-    Nil
-}
-
 filter(ls, fn) {
     case ls {
         Cons(v, rest) -> {

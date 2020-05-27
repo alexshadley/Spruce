@@ -5,6 +5,7 @@ use std::io::Write;
 use crate::name_analysis::*;
 use crate::typecheck::Environment;
 
+
 pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     let js_helpers = fs::read_to_string("src/helper.js").expect("cannot read js helpers file");
     write!(out, "{}", js_helpers).expect("failed to write helpers");
