@@ -31,21 +31,25 @@ Char, as is done in Haskell.
 | List Comprehension | |
 | List Iteration (for loop) | |
 
-Technically, Lists can currently be constructed in Spruce with ADTs as such:
+The Spruce approach to lists is experimental, and prone to change. This is the
+prelude definition of list:
 
 ```
-type List {
-    Cons(Float, List)
+type List(a) {
+    Cons(List(a), a)
     Nil
 }
 ```
 
-This is the list definition one might expect to see in functional languages.
-However, for performance reasons it probably makes more sense to back Spruce's
-lists with JavaScript lists. Ideally interfaces will make it possible for both
-versions of a list to be used in things like for loops. One of the main design
-goals of Spruce is to make list processing easy and expressive with a mix of
-functional and imperative concepts.
+Which is similar to how Haskell implements list, except with the two arguments
+of `Cons` swapped. The reasoning behind this is that JavaScript arrays (which
+Spruce arrays are directly backed by) have O(1) append time, and O(n) prepend
+time. This definition ensures that the `Cons` constructor works in constant
+time.
+
+While this rationale makes enough sense from a performance perspective, it has
+yet to be seen if this is a practical way to write software that operates on
+lists. Defining lists this way need not be set in stone.
 
 ## Functions
 
