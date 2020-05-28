@@ -10,7 +10,7 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     let js_helpers = fs::read_to_string("src/helper.js").expect("cannot read js helpers file");
     write!(out, "{}", js_helpers).expect("failed to write helpers");
 
-    for t in &prog.types {
+    for (_, t) in &prog.type_table.types {
         write!(out, "{}", gen_type(prog, env, t)).expect("failed to write line");
     }
 
@@ -26,11 +26,18 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     write!(out, "\nconsole.log(main())").expect("failed to write line");
 }
 
-fn gen_type(prog: &Prog, env: &Environment, t: &TypeNode) -> String {
-    let mut output = format!("const {} = {{\n", t.val.name);
+fn gen_type(prog: &Prog, env: &Environment, t: &ADT) -> String {
+    let mut output = format!("const {} = {{\n", t.name);
 
-    for opt in &t.val.options {
-        output = append_line(&output, format!("{}: '{}',\n", opt.val.name.to_ascii_uppercase(), opt.val.name), 1);
+    let mut options = Vec::new();
+    for id in &t.values {
+        options.push(
+            (*prog.type_table.values.get(id).expect("dangling val id")).clone()
+        );
+    }
+
+    for opt in &options {
+        output = append_line(&output, format!("{}: '{}',\n", opt.name.to_ascii_uppercase(), opt.name), 1);
     }
 
     output = format!("{}}}\n", output);

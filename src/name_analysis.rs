@@ -736,7 +736,7 @@ pub enum TypeID {
     Prim(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ADTValue {
     pub id: ADTValID,
     pub name: String,
@@ -748,7 +748,8 @@ pub struct ADTValue {
 pub struct ADT {
     pub id: ADTID,
     pub type_params: Vec<TParamID>,
-    pub name: String
+    pub name: String,
+    pub values: Vec<ADTValID>
 }
 
 #[derive(Debug, PartialEq)]
@@ -788,21 +789,18 @@ impl TypeTable {
     }
 
     fn add_type(&mut self, name: &String, params: Vec<TParamID>) {
-        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params};
+        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params, values: vec![]};
         self.next_type_id += 1;
         self.types.insert(name.clone(), new_adt);
     }
 
     fn add_value(&mut self, name: &String, args: &Vec<TypeID>, data_type: &String) {
-        let mut r = self.types.get_mut(data_type);
-        match r {
-            Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
-                self.next_val_id += 1;
-                self.values.insert(new_val.name.clone(), new_val);
-            }
-            None => unreachable!()
-        }
+        let mut adt = self.types.get_mut(data_type).expect("unreachable");
+        adt.values.push(self.next_val_id);
+
+        let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
+        self.next_val_id += 1;
+        self.values.insert(new_val.name.clone(), new_val);
     }
 
     fn add_tparam(&mut self, name: &String) -> TParamID {
