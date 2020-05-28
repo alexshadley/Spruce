@@ -9,6 +9,12 @@ type_option = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
 type_id = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
+// type annotation definitions
+type_ann = { fn |}
+    unit = { "()" }
+    fn = { "(" ~ (type_ann ~ ("," ~ type_ann)*)? ~ ")" ~ "->" ~ type_ann }
+
+
 function_decl = { id ~ fn_args ~ "{\n" ~ body ~ "}" }
 fn_args = { "(" ~ (id ~ ("," ~ id)* )? ~ ")" }
 
