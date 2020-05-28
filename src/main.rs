@@ -24,7 +24,7 @@ fn main() {
     let spruce_code: &String = &args[1];
     let spruce_path = Path::new(spruce_code);
 
-    let prelude = fs::read_to_string("prelude.sp").expect("cannot read prelude");
+    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
     let unparsed_file = fs::read_to_string(spruce_path).expect(&format!("Cannot find file {}", spruce_code));
     let files = vec![(prelude.as_str(), String::from("prelude")), (unparsed_file.as_str(), String::from("main"))];
 

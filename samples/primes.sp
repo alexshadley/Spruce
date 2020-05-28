@@ -1,8 +1,8 @@
 filter(ls, fn) {
     case ls {
-        Cons(v, rest) -> {
+        Cons(rest, v) -> {
             case fn(v) {
-                True -> Cons(v, filter(rest, fn))
+                True -> Cons(filter(rest, fn), v)
                 False -> filter(rest, fn)
             }
         }
@@ -12,9 +12,9 @@ filter(ls, fn) {
 
 filter2(ls, fn, firstArg) {
     case ls {
-        Cons(v, rest) -> {
+        Cons(rest, v) -> {
             case fn(firstArg, v) {
-                True -> Cons(v, filter2(rest, fn, firstArg))
+                True -> Cons(filter2(rest, fn, firstArg), v)
                 False -> filter2(rest, fn, firstArg)
             }
         }
@@ -24,7 +24,7 @@ filter2(ls, fn, firstArg) {
 
 range(start, end) {
     case start < end {
-        True -> Cons(start, range(start + 1, end))
+        True -> Cons(range(start + 1, end), start)
         False -> Nil
     }
 }
@@ -34,7 +34,7 @@ isPrime(n) {
     factors = filter2(checkFactors, isFactor, n)
 
     case factors {
-        Cons(val, rest) -> False
+        Cons(rest, val) -> False
         Nil -> True
     }
 }

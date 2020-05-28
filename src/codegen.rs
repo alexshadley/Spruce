@@ -3,14 +3,14 @@ use std::io::Write;
 
 
 use crate::name_analysis::*;
-use crate::typecheck::Environment;
+use crate::typecheck::{Environment, Type};
 
 
 pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     let js_helpers = fs::read_to_string("src/helper.js").expect("cannot read js helpers file");
     write!(out, "{}", js_helpers).expect("failed to write helpers");
 
-    for t in &prog.types {
+    for (_, t) in &prog.type_table.types {
         write!(out, "{}", gen_type(prog, env, t)).expect("failed to write line");
     }
 
@@ -26,11 +26,18 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     write!(out, "\nconsole.log(main())").expect("failed to write line");
 }
 
-fn gen_type(prog: &Prog, env: &Environment, t: &TypeNode) -> String {
-    let mut output = format!("const {} = {{\n", t.val.name);
+fn gen_type(prog: &Prog, env: &Environment, t: &ADT) -> String {
+    let mut output = format!("const {} = {{\n", t.name);
 
-    for opt in &t.val.options {
-        output = append_line(&output, format!("{}: '{}',\n", opt.val.name.to_ascii_uppercase(), opt.val.name), 1);
+    let mut options = Vec::new();
+    for id in &t.values {
+        options.push(
+            (*prog.type_table.values.get(id).expect("dangling val id")).clone()
+        );
+    }
+
+    for opt in &options {
+        output = append_line(&output, format!("{}: '{}',\n", opt.name.to_ascii_uppercase(), opt.name), 1);
     }
 
     output = format!("{}}}\n", output);
@@ -111,17 +118,95 @@ fn gen_stmt(prog: &Prog, env: &Environment, stmt: &StmtNode, indent: usize) -> (
 
 fn gen_case(prog: &Prog, env: &Environment, case_node: &CaseNode, indent: usize) -> (String, Option<String>) {
     let case = &case_node.val;
+    let adt_id: ADTID;
+
     // first indents are already added by stmt. This should be fixed later
     let mut output = format!("var _case_expr{} = {};\n", case.id, gen_expr(prog, &case.expr));
     output = append_line(&output, format!("var _case_val{};\n", case.id), indent);
-    output = append_line(&output, format!("switch(_case_expr{}[0]){{\n", case.id), indent);
 
-    for opt in &case.options {
-        output = format!("{}{}", output, gen_case_option(prog, env, &opt, case.id, indent + 1));
+    let case_expr_type = env.case_expr_type.get(&case.id).expect("dangling case id");
+    match case_expr_type {
+        Type::ADT(id, _) => {
+            adt_id = *id;
+            if *id == prog.internal_types.list_id {
+                output = append_line(&output, format!("switch(_case_expr{}.length > 0){{\n", case.id), indent);
+            }
+            else {
+                output = append_line(&output, format!("switch(_case_expr{}[0]){{\n", case.id), indent);
+            }
+        }
+        _ => unreachable!()
+    }
+
+
+    if adt_id == prog.internal_types.list_id {
+        for opt in &case.options {
+            output = format!("{}{}", output, gen_case_list_option(prog, env, &opt, case.id, indent + 1));
+        }
+    }
+    else {
+        for opt in &case.options {
+            output = format!("{}{}", output, gen_case_option(prog, env, &opt, case.id, indent + 1));
+        }
     }
 
     output = append_line(&output, String::from("}\n"), indent);
     (output, Some(format!("_case_val{}", case.id)))
+}
+
+/// Special case of list options where we're destructuring a list
+fn gen_case_list_option(prog: &Prog, env: &Environment, option_node: &CaseOptionNode, case_id: CaseID, indent: usize) -> String {
+    let option = &option_node.val;
+    let body_indent = indent + 1;
+
+    let mut output = String::from("");
+
+    if option_node.val.pattern.val.base == prog.internal_types.cons_id {
+        output = append_line(&String::from(""), format!("case true:\n", ), indent);
+
+
+        output = append_line(
+            &output, 
+            format!("var {} = _case_expr{}.slice(0, -1);\n", 
+                gen_sym(&prog.symbol_table, &option_node.val.pattern.val.args[0]), 
+                case_id
+            ),
+            body_indent
+        );
+
+        output = append_line(
+            &output, 
+            format!("var {} = _case_expr{}[_case_expr{}.length - 1];\n", 
+                gen_sym(&prog.symbol_table, &option_node.val.pattern.val.args[1]), 
+                case_id,
+                case_id
+            ),
+            body_indent
+        );
+    }
+
+    else if option.pattern.val.base == prog.internal_types.nil_id {
+        output = append_line(&String::from(""), format!("case false:\n", ), indent);
+    }
+
+    else {
+        unreachable!();
+    }
+
+    match &option.body.val {
+        CaseBody::Body(body) => {
+            let (body, val_handle) = gen_body(prog, env, body, body_indent);
+            output = format!("{}{}", output, body);
+            val_handle.map(|handle| {
+                output = append_line(&output, format!("_case_val{} = {};\n", case_id, handle), body_indent);
+            });
+        }
+        CaseBody::Expr(expr) => {
+            output = append_line(&output, format!("_case_val{} = {};\n", case_id, gen_expr(prog, expr)), body_indent);
+        }
+    }
+
+    append_line(&output, String::from("break;\n"), body_indent)
 }
 
 fn gen_case_option(prog: &Prog, env: &Environment, option_node: &CaseOptionNode, case_id: CaseID, indent: usize) -> String {
@@ -196,13 +281,21 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
             format!("{})", output)
         }
         Expr::ADTVal(base, args) => {
-            let mut output = format!("[{}", gen_adtval(&prog.type_table, base));
-
-            for arg in args {
-                output = format!("{}, {}", output, gen_expr(prog, &arg));
+            if *base == prog.internal_types.cons_id {
+                format!("_push_and_copy({}, {})", gen_expr(prog, &args[0]), gen_expr(prog, &args[1]))
             }
+            else if *base == prog.internal_types.nil_id {
+                String::from("[]")
+            }
+            else {
+                let mut output = format!("[{}", gen_adtval(&prog.type_table, base));
 
-            format!("{}]", output)
+                for arg in args {
+                    output = format!("{}, {}", output, gen_expr(prog, &arg));
+                }
+
+                format!("{}]", output)
+            }
         }
     }
 }

@@ -27,9 +27,9 @@ type List(a) {
     Nil
 }
 
-map(ls, fn) {
+listMap(ls, fn) {
     case ls {
-        Cons(rest, val) -> Cons(map(rest, fn), val)
+        Cons(rest, val) -> Cons(listMap(rest, fn), val)
         Nil -> Nil
     }
 }

@@ -165,30 +165,6 @@ pub struct TargetNode {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Type {
-    pub name: String,
-    pub options: Vec<TypeOptionNode>
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TypeNode {
-    pub val: Type,
-    pub info: NodeInfo
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TypeOption {
-    pub name: String,
-    pub args: Vec<String>
-}
-
-#[derive(Debug, PartialEq)]
-pub struct TypeOptionNode {
-    pub val: TypeOption,
-    pub info: NodeInfo
-}
-
-#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
     pub args: Vec<SymbolID>,
@@ -216,7 +192,6 @@ pub struct InternalTypes {
 pub struct Prog {
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
-    pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
     pub type_table: TypeTableExt,
     pub internal_types: InternalTypes
@@ -224,7 +199,7 @@ pub struct Prog {
 
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
-    let (types, type_table) = analyze_types(&prog)?;
+    let type_table = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
     let mut defs = Vec::new();
@@ -250,7 +225,6 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     let out_prog = Prog {
         functions: funcs, 
         definitions: defs,
-        types: types,
         symbol_table: sym_table,
         type_table: type_table.to_ext(),
         internal_types: internal_types
@@ -736,7 +710,7 @@ pub enum TypeID {
     Prim(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ADTValue {
     pub id: ADTValID,
     pub name: String,
@@ -748,7 +722,8 @@ pub struct ADTValue {
 pub struct ADT {
     pub id: ADTID,
     pub type_params: Vec<TParamID>,
-    pub name: String
+    pub name: String,
+    pub values: Vec<ADTValID>
 }
 
 #[derive(Debug, PartialEq)]
@@ -788,21 +763,18 @@ impl TypeTable {
     }
 
     fn add_type(&mut self, name: &String, params: Vec<TParamID>) {
-        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params};
+        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params, values: vec![]};
         self.next_type_id += 1;
         self.types.insert(name.clone(), new_adt);
     }
 
     fn add_value(&mut self, name: &String, args: &Vec<TypeID>, data_type: &String) {
-        let mut r = self.types.get_mut(data_type);
-        match r {
-            Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
-                self.next_val_id += 1;
-                self.values.insert(new_val.name.clone(), new_val);
-            }
-            None => unreachable!()
-        }
+        let mut adt = self.types.get_mut(data_type).expect("unreachable");
+        adt.values.push(self.next_val_id);
+
+        let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
+        self.next_val_id += 1;
+        self.values.insert(new_val.name.clone(), new_val);
     }
 
     fn add_tparam(&mut self, name: &String) -> TParamID {
@@ -844,7 +816,7 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), SpruceErr>{
+fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, SpruceErr>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
@@ -890,22 +862,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Spr
         }
     }
 
-    let new_types = prog.types.iter().map(|t| {
-        TypeNode {
-            val: Type {
-                name: t.val.name.clone(),
-                options: t.val.options.iter().map(|o| { 
-                    TypeOptionNode {
-                        val: TypeOption {name: o.val.name.clone(), args: o.val.args.iter().map(|id| {id.name.clone()}).collect() },
-                        info: o.info.clone()
-                    }
-                }).collect()
-            },
-            info: t.info.clone()
-        }
-    }).collect();
-
-    Ok((new_types, type_table))
+    Ok(type_table)
 }
 
 fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, SpruceErr> {
