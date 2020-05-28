@@ -50,7 +50,8 @@ escape     = { "\\" ~ (predefined | byte | unicode) }
 raw_string = { (!("\\" | "\"") ~ ANY)+ }
 string = { "\"" ~ (raw_string | escape)* ~ "\""}
 
-operation = _{ add | subtract | multiply | divide | power | modulus | eq | not_eq | lt_eq | gt_eq | lt | gt }
+operation = _{ concat | add | subtract | multiply | divide | power | modulus | eq | not_eq | lt_eq | gt_eq | lt | gt }
+    concat   = { "++" }
     add      = { "+" }
     subtract = { "-" }
     multiply = { "*" }

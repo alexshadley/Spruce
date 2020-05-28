@@ -539,6 +539,15 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             subs.extend(subs2);
             Ok(subs)
         }
+        na::Expr::Concat(left, right) => {
+            let mut subs = unify(ty, &str_prim!(), &expr.info)?;
+
+            let subs1 = typecheck(env, &*left, &str_prim!())?;
+            let subs2 = typecheck(env, &*right, &str_prim!())?;
+            subs.extend(subs1);
+            subs.extend(subs2);
+            Ok(subs)
+        }
 
         na::Expr::Id(id) => {
             match env.get_sym_type(&id) {

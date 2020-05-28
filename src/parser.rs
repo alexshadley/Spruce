@@ -25,6 +25,7 @@ lazy_static! {
             Operator::new(add, Left) | Operator::new(subtract, Left),
             Operator::new(multiply, Left) | Operator::new(divide, Left),
             Operator::new(power, Right),
+            Operator::new(concat, Left),
         ])
     };
 }
@@ -65,6 +66,7 @@ pub enum Expr {
     GtEq(Box<ExprNode>, Box<ExprNode>),
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
+    Concat(Box<ExprNode>, Box<ExprNode>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -270,6 +272,7 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                 Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
                 Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
                 Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
+                Rule::concat   => Expr::Concat(Box::from(lhs), Box::from(rhs)),
                 _ => unreachable!(),
             };
 

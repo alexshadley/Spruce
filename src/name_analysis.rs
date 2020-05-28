@@ -49,6 +49,7 @@ pub enum Expr {
     GtEq(Box<ExprNode>, Box<ExprNode>),
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
+    Concat(Box<ExprNode>, Box<ExprNode>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -682,6 +683,11 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
             let left = check_expr(table, types, &*l)?;
             let right = check_expr(table, types, &*r)?;
             Ok(Expr::Gt(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Concat(l, r) => {
+            let left = check_expr(table, types, &*l)?;
+            let right = check_expr(table, types, &*r)?;
+            Ok(Expr::Concat(Box::from(left), Box::from(right)))
         }
 
         parser::Expr::FnCall(fn_name, args) => {
