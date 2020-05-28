@@ -11,7 +11,7 @@ type TVarID = u32;
 
 /// a type of a symbol, expression, etc
 #[derive(Clone, Debug, PartialEq)]
-enum Type {
+pub enum Type {
     Unit,
     Prim(String),
     TVar(TVarID),
@@ -124,6 +124,7 @@ pub struct Environment {
 
     adt_type: HashMap<na::ADTID, Type>,
     val_type: HashMap<na::ADTValID, Type>,
+    pub case_expr_type: HashMap<na::CaseID, Type>,
 
     // prelude adts are used internally, so we need to record their type ids
     internal_types: na::InternalTypes
@@ -137,6 +138,7 @@ impl Environment {
             active_sym_type: HashMap::new(), 
             val_type: HashMap::new(), 
             adt_type: HashMap::new(),
+            case_expr_type: HashMap::new(),
             internal_types: internal_types
         }
     }
@@ -299,7 +301,7 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let mut subs = HashMap::new();
 
     let expr_tvar = env.new_tvar();
-    let expr_subs = typecheck(env, &case.val.expr, &expr_tvar).expect("failed typecheck");
+    let expr_subs = typecheck(env, &case.val.expr, &expr_tvar)?;
     let expr_type = apply(&expr_subs, expr_tvar);
     env.apply_subs(&expr_subs);
     subs.extend(expr_subs);
@@ -344,8 +346,12 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let adt_tvar_subs = refresh_tvars(env, &adt_type);
 
     let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.info)?;
+
+    env.case_expr_type.insert(case.val.id, apply(&pattern_subs, expr_type.clone()));
+
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
+
 
     let mut is_unit = false;
     let mut has_expr = false;

@@ -26,7 +26,7 @@ Char, as is done in Haskell.
 | Feature | Status |
 |---------|--------|
 | Lists | :heavy_check_mark: |
-| JS-backed Lists | |
+| JS-backed Lists | :heavy_check_mark: |
 | List Indexing (Python-style) | |
 | List Comprehension | |
 | List Iteration (for loop) | |
