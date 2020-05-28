@@ -1,6 +1,7 @@
 /target
 .vscode
 out.js
+/samples
 # emacs backups
 .saves
 *~
