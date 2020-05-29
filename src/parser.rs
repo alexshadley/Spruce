@@ -228,7 +228,11 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
     PREC_CLIMBER.climb(
         expr.into_inner(),
         |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::id => ExprNode {
+            Rule::up_id => ExprNode {
+                val: Expr::Id(String::from(pair.as_str())),
+                info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
+            },
+            Rule::lo_id => ExprNode {
                 val: Expr::Id(String::from(pair.as_str())),
                 info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
             },
@@ -238,6 +242,18 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
             },
             Rule::expr => to_expr(pair, file_name),
             Rule::fn_call => {
+                let pair_span = pair.as_span();
+
+                let mut children = pair.into_inner();
+                let id = String::from(children.next().unwrap().as_str());
+                let args = children.into_iter().map(|arg| { Box::from(to_expr(arg, file_name)) }).collect();
+
+                ExprNode {
+                    val: Expr::FnCall(id, args),
+                    info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
+                }
+            }
+            Rule::val_call => {
                 let pair_span = pair.as_span();
 
                 let mut children = pair.into_inner();
@@ -374,7 +390,7 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
             let tgt = children.next().unwrap();
             let tgt_span = tgt.as_span();
             let target_val = match tgt.as_rule() {
-                Rule::id => Target::Var(String::from(tgt.as_str())),
+                Rule::lo_id => Target::Var(String::from(tgt.as_str())),
                 Rule::mutable_tgt => Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str())),
                 Rule::update_tgt => Target::Update(String::from(tgt.into_inner().next().unwrap().as_str())),
                 _ => unreachable!()
