@@ -3,36 +3,39 @@ file = _{ SOI ~ (top_stmt | empty_line)* ~ EOI }
 top_stmt = _{ ( function_decl | type_decl | assign ) ~ "\n" }
 stmt = _{ ( assign | fn_call | case ) ~ "\n" }
 
-type_decl = { "type" ~ id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
-type_params = { ("(" ~ id ~ ("," ~ id)* ~ ")")? }
-type_option = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
+type_decl = { "type" ~ up_id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
+type_params = { ("(" ~ lo_id ~ ("," ~ lo_id)* ~ ")")? }
+type_option = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
-type_id = { id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
+type_id = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? | lo_id }
 
-function_decl = { id ~ fn_args ~ "{\n" ~ body ~ "}" }
-fn_args = { "(" ~ (id ~ ("," ~ id)* )? ~ ")" }
+function_decl = { lo_id ~ fn_args ~ "{\n" ~ body ~ "}" }
+fn_args = { "(" ~ (lo_id ~ ("," ~ lo_id)* )? ~ ")" }
 
 assign = { target ~ "=" ~ valued }
 
-target = _{ mutable_tgt | update_tgt | id }
-mutable_tgt = { "mut" ~ id }
-update_tgt = { id ~ ":" }
+target = _{ mutable_tgt | update_tgt | lo_id }
+mutable_tgt = { "mut" ~ lo_id }
+update_tgt = { lo_id ~ ":" }
 
 // something that can be reduced to a value
 valued = _{ case | expr }
 
 case = { "case" ~ expr ~ "{\n" ~ case_option+ ~ "}" }
 case_option = { case_pattern ~ "->" ~ (expr | "{\n" ~ body ~ "}") ~ "\n" }
-case_pattern = { id ~ ( "(" ~ id ~ ( "," ~ id )*  ~ ")")? }
+case_pattern = { up_id ~ ( "(" ~ lo_id ~ ( "," ~ lo_id )*  ~ ")")? }
 
 body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
 
 expr = { term ~ (operation ~ term)* }
-term = _{ fn_call | id | num | "(" ~ expr ~ ")" }
+term = _{ fn_call | val_call | id | num | "(" ~ expr ~ ")" }
 
-fn_call = { id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
+fn_call = { lo_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
+val_call = { up_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 
-id = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+id = _{ up_id | lo_id }
+up_id = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }
+lo_id = @{ ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC* }
 
 empty_line = _{ "\n" }
 
