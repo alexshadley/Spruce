@@ -9,20 +9,23 @@ type_option = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
 type_id = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? | lo_id }
 
-// type annotation definitions
-type_ann = { fn |}
-    unit = { "()" }
-    fn = { "(" ~ (type_ann ~ ("," ~ type_ann)*)? ~ ")" ~ "->" ~ type_ann }
-
-
 function_decl = { lo_id ~ fn_args ~ "{\n" ~ body ~ "}" }
-fn_args = { "(" ~ (lo_id ~ ("," ~ lo_id)* )? ~ ")" }
+fn_args = { "(" ~ (fn_arg ~ ("," ~ fn_arg)*)? ~ ")" ~ ("->" ~ type_ann)? }
+fn_arg = { lo_id ~ (":" ~ type_ann)? }
 
 assign = { target ~ "=" ~ valued }
 
 target = _{ mutable_tgt | update_tgt | lo_id }
 mutable_tgt = { "mut" ~ lo_id }
 update_tgt = { lo_id ~ ":" }
+
+// type annotation definitions
+type_ann = _{ func | unit | adt | tvar }
+    unit = { "()" }
+    adt = { up_id ~ ("(" ~ type_ann ~ ("," ~ type_ann)* ~ ")")? }
+    tvar = { lo_id }
+    func = { "(" ~ (type_ann ~ ("," ~ type_ann)*)? ~ ")" ~ "->" ~ type_ann }
+
 
 // something that can be reduced to a value
 valued = _{ case | expr }

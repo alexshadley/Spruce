@@ -399,7 +399,7 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
     table.push_layer();
 
     let mut arg_symbols = Vec::new();
-    for arg in &func.val.args {
+    for (arg, ann) in &func.val.args {
         match table.attempt_insert(&arg, SymbolType::Const) {
             Some(id) => {
                 arg_symbols.push(id);

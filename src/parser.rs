@@ -205,10 +205,25 @@ pub struct TypeOptionNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum TypeAnnotation {
+    Unit,
+    ADT(String, Vec<Box<TypeAnnotationNode>>),
+    TVar(String),
+    Func(Vec<Box<TypeAnnotationNode>>, Box<TypeAnnotationNode>)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeAnnotationNode {
+    pub val: TypeAnnotation,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: String,
-    pub args: Vec<String>,
-    pub body: BodyNode
+    pub args: Vec<(String, Option<TypeAnnotationNode>)>,
+    pub body: BodyNode,
+    pub out_ann: Option<TypeAnnotationNode>
 }
 
 #[derive(Debug, PartialEq)]
@@ -428,6 +443,50 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
     }
 }
 
+fn to_type_annotation(mut p: Pair<Rule>, file_name: &String) -> TypeAnnotationNode {
+    let ann_span = p.as_span();
+    let type_ann = match p.as_rule() {
+        Rule::unit => TypeAnnotation::Unit,
+        Rule::tvar => TypeAnnotation::TVar(
+            String::from(p.as_str())
+        ),
+        Rule::adt => {
+            let mut children = p.into_inner();
+            let id = String::from(
+                children.next().unwrap().as_str()
+            );
+
+            let mut args = Vec::new();
+            for arg in children {
+                args.push(
+                    Box::from(to_type_annotation(arg, file_name))
+                );
+            }
+            TypeAnnotation::ADT(id, args)
+        }
+        Rule::func => {
+            let mut children = p.into_inner();
+            let mut sub_exprs = Vec::new();
+            for c in children {
+                sub_exprs.push(
+                    Box::from(to_type_annotation(c, file_name))
+                );
+            }
+
+            let out = sub_exprs.pop().expect("unreachable");
+            TypeAnnotation::Func(sub_exprs, out)
+        }
+        _ => unreachable!()
+    };
+    TypeAnnotationNode {
+        val: type_ann,
+        info: NodeInfo {
+            span: Span::from(ann_span),
+            file: file_name.clone()
+        }
+    }
+}
+
 fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
     let func_span = p.as_span();
     let mut func = p.into_inner();
@@ -436,8 +495,29 @@ fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
 
     let args = func.next().unwrap();
     let mut arg_vec = Vec::new();
+    let mut out_ann = None;
     for arg in args.into_inner() {
-        arg_vec.push(String::from(arg.as_str()));
+        match arg.as_rule() {
+            Rule::fn_arg => {
+                let mut arg_parts = arg.into_inner();
+                let id = String::from(
+                    arg_parts.next().unwrap().as_str()
+                );
+                let ann = match arg_parts.next() {
+                    Some(annotation) => {
+                        Some(to_type_annotation(annotation, file_name))
+                    }
+                    None => {
+                        None
+                    }
+                };
+                arg_vec.push((id, ann));
+            }
+            Rule::func | Rule::unit | Rule::adt | Rule::tvar => {
+                out_ann = Some(to_type_annotation(arg, file_name))
+            }
+            _ => unreachable!()
+        }
     }
 
     let body = to_body(func.next().unwrap(), file_name);
@@ -445,7 +525,8 @@ fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
     let func = Func {
         name: id,
         args: arg_vec,
-        body: body
+        body: body,
+        out_ann: out_ann
     };
 
     FuncNode {

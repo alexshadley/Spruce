@@ -3,7 +3,7 @@ type Bool {
     False
 }
 
-not(b) {
+not(b: Bool) -> Bool {
     case b {
         True -> False
         False -> True
