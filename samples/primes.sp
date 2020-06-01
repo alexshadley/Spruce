@@ -1,4 +1,4 @@
-filter(ls, fn) {
+filter(ls: List(a), fn: (a) -> Bool) -> List(a) {
     case ls {
         Cons(rest, v) -> {
             case fn(v) {
@@ -22,14 +22,14 @@ filter2(ls, fn, firstArg) {
     }
 }
 
-range(start, end) {
+range(start: Int, end: Int) -> List(Int) {
     case start < end {
         True -> Cons(range(start + 1, end), start)
         False -> Nil
     }
 }
 
-isPrime(n) {
+isPrime(n: Int) -> Bool {
     checkFactors = range(2, n)
     factors = filter2(checkFactors, isFactor, n)
 

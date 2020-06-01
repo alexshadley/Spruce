@@ -164,11 +164,27 @@ pub struct TargetNode {
     pub info: NodeInfo
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum TypeAnnotation {
+    Unit,
+    ADT(ADTID, Vec<Box<TypeAnnotationNode>>),
+    Prim(String),
+    TVar(TParamID),
+    Func(Vec<Box<TypeAnnotationNode>>, Box<TypeAnnotationNode>)
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeAnnotationNode {
+    pub val: TypeAnnotation,
+    pub info: NodeInfo
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
-    pub args: Vec<SymbolID>,
-    pub body: BodyNode
+    pub args: Vec<(SymbolID, Option<TypeAnnotationNode>)>,
+    pub body: BodyNode,
+    pub out_ann: Option<TypeAnnotationNode>
 }
 
 #[derive(Debug, PartialEq)]
@@ -199,7 +215,7 @@ pub struct Prog {
 
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
-    let type_table = analyze_types(&prog)?;
+    let mut type_table = analyze_types(&prog)?;
     let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
 
     let mut defs = Vec::new();
@@ -209,7 +225,7 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
 
     let mut funcs = Vec::new();
     for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
-        funcs.push(check_function(&mut sym_table, &type_table, func, id)?);
+        funcs.push(check_function(&mut sym_table, &mut type_table, func, id)?);
     }
     
     sym_table.pop_layer();
@@ -395,14 +411,26 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
     }
 }
 
-fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
+fn check_function(table: &mut SymbolTable, types: &mut TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
     table.push_layer();
+
+    let mut local_tvars = HashMap::new();
 
     let mut arg_symbols = Vec::new();
     for (arg, ann) in &func.val.args {
         match table.attempt_insert(&arg, SymbolType::Const) {
             Some(id) => {
-                arg_symbols.push(id);
+                let checked_ann = match ann {
+                    Some(a) => {
+                        Some(
+                            check_annotation(table, types, a, &mut local_tvars)?
+                        )
+                    }
+                    None => None
+                };
+                arg_symbols.push(
+                    (id, checked_ann)
+                );
             }
             None => {
                 // TODO: implement variable shadowing with arguments
@@ -411,13 +439,77 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
         }
     }
 
+    let checked_out_ann = match &func.val.out_ann {
+        Some(ann) => Some(check_annotation(table, types, &ann, &mut local_tvars)?),
+        None => None
+    };
+
     let body = check_body(table, types, &func.val.body)?;
 
     table.pop_layer();
 
     Ok(FuncNode {
-        val: Func {name: id, args: arg_symbols, body: body},
+        val: Func {name: id, args: arg_symbols, body: body, out_ann: checked_out_ann},
         info: func.info.clone()
+    })
+}
+
+fn check_annotation(table: &mut SymbolTable, types: &mut TypeTable, ann: &parser::TypeAnnotationNode, local_tvars: &mut HashMap<String, TParamID>) -> Result<TypeAnnotationNode, SpruceErr> {
+    let ann_info = ann.info.clone();
+
+    let ann_val = match &ann.val {
+        parser::TypeAnnotation::Unit => TypeAnnotation::Unit,
+        parser::TypeAnnotation::TVar(name) => {
+            match local_tvars.get(name) {
+                Some(id) => TypeAnnotation::TVar(*id),
+                None => {
+                    let new_id = types.add_tparam(name);
+                    local_tvars.insert(name.clone(), new_id);
+                    TypeAnnotation::TVar(new_id)
+                }
+            }
+        }
+        parser::TypeAnnotation::ADT(name, subanns) => {
+            let mut checked_anns = Vec::new();
+            for subann in subanns {
+                checked_anns.push(
+                    Box::from(check_annotation(table, types, subann, local_tvars)?)
+                )
+            }
+
+            if types.primitives.contains(name) {
+                TypeAnnotation::Prim(name.clone())
+            }
+            else {
+                match types.get_type(&name) {
+                    Some(adt) => {
+                        TypeAnnotation::ADT(adt.id, checked_anns)
+                    }
+                    None => {
+                        return Err(undeclared(&name, ann_info));
+                    }
+                }
+            }
+        }
+        parser::TypeAnnotation::Func(args, out) => {
+            let mut checked_args = Vec::new();
+            for arg in args {
+                checked_args.push(
+                    Box::from(check_annotation(table, types, arg, local_tvars)?)
+                )
+            }
+
+            let checked_out = Box::from(
+                check_annotation(table, types, out, local_tvars)?
+            );
+            TypeAnnotation::Func(checked_args, checked_out)
+        }
+        _ => unimplemented!()
+    };
+
+    Ok(TypeAnnotationNode {
+        val: ann_val,
+        info: ann_info
     })
 }
 
@@ -800,7 +892,7 @@ impl TypeTable {
     fn has_type(&self, name: &String) -> bool {
         self.types.contains_key(name) || self.primitives.contains(name)
     }
-    
+
     fn has_value(&self, name: &String) -> bool {
         self.values.contains_key(name)
     }

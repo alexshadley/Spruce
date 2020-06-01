@@ -64,7 +64,7 @@ lists. Defining lists this way need not be set in stone.
 
 | Feature | Status |
 |---------|--------|
-| Type Annotations | |
+| Type Annotations | :heavy_check_mark: |
 | Type Inference | :heavy_check_mark: |
 | Type Aliases | |
 | Typeclasses | |
@@ -128,7 +128,7 @@ statements.
 | Indentation | :heavy_check_mark: |
 | Output Optimization | |
 
-The compiler currently however generates javascript that faithfully executes
+The compiler currently generates javascript that faithfully executes
 the instructions provided by the source Spruce. However, no optimization is
 done on this output, which is of course very important if we want anyone to
 seriously consider using Spruce. Compier optimization is a massive topic

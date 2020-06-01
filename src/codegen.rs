@@ -51,10 +51,10 @@ fn gen_func(prog: &Prog, env: &Environment, func_node: &FuncNode, indent: usize)
 
     let body_indent = indent + 1;
 
-    func.args.first().as_ref().map(|arg| {
+    func.args.first().as_ref().map(|(arg, _ann)| {
         output = format!("{}{}", output, gen_sym(&prog.symbol_table, arg));
     });
-    for arg in func.args.iter().skip(1) {
+    for (arg, _ann) in func.args.iter().skip(1) {
         output = format!("{}, {}", output, gen_sym(&prog.symbol_table, arg));
     };
 
