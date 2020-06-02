@@ -20,7 +20,7 @@ that this isn't actualy a language feature, it's just a natural consequence of
 the way functions are declared in languages like Haskell. The `->` operator is
 right associative, so that type defintion acutally means
 `Int -> (Int -> Int)`, or 'function from `Int` to function from `Int` to
-`Int`. When we call the function with two arguments you're actually currying
+`Int`'. When we call the function with two arguments you're actually currying
 and then immediately using your curried function. Neat, huh?
 
 This is not only interesting PL theory, it's actually very useful any time
@@ -29,9 +29,9 @@ closures (i.e. functions that return functions), but not currying, which is a
 shame because currying lets us very easily create new functions on the fly.
 Certainly there's no theoretical reason we can't have closures in a language
 like Spruce, so what gives? As far as I know, there is no precedent for what
-this would look like syntactically, so what if we introduced some, ah, _spicy_
-new syntax to make this feature reality? This little guy hasn't gotten much
-love in the last decade: `@`, so let's give it a shot:
+this would look like syntactically, so what if we introduced some _spicy_ new
+syntax to make this feature reality? This little guy hasn't gotten much love
+in the last decade: @, so let's give it a shot:
 
 ```
 add(x: Int, y: Int) -> Int {
