@@ -9,7 +9,10 @@ type_option = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
 type_id = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? | lo_id }
 
-interop_decl = { "interop" ~ lo_id ~ fn_args }
+interop_decl = { "interop" ~ interop_id ~ fn_args }
+// interop ids are more permissive because they need to be able to mirror
+// javascript function names
+interop_id = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_" | ".")* }
 
 function_decl = { lo_id ~ fn_args ~ "{\n" ~ body ~ "}" }
 fn_args = { "(" ~ (fn_arg ~ ("," ~ fn_arg)*)? ~ ")" ~ ("->" ~ type_ann)? }
@@ -41,7 +44,9 @@ body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
 expr = { term ~ (operation ~ term)* }
 term = _{ fn_call | val_call | id | num | "(" ~ expr ~ ")" }
 
-fn_call = { lo_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
+// we have to allow interop_id here, but that feels gross. There's almost
+// certainly a better approach
+fn_call = { interop_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 val_call = { up_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 
 id = _{ up_id | lo_id }

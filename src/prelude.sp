@@ -1,4 +1,4 @@
-interop printInt(x: Int) -> ()
+interop console.log(x: Int) -> ()
 
 type Bool {
     True

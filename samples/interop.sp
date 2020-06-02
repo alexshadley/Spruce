@@ -1,5 +1,3 @@
-interop printInt(x: Int) -> ()
-
 main() {
-    printInt(5)
+    console.log(5)
 }
