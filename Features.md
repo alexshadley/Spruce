@@ -108,6 +108,23 @@ Pattern matching currently works to allow destructuring of ADT values, but
 cannot do anything useful with numeric types, or strings or tuples when those
 are implemented.
 
+## JS Interop
+
+| Feature | Status |
+|---------|--------|
+| Basic Interop | :heavy_check_mark: |
+| Any Valid JS Fn Name | |
+
+If Spruce programs are going to do anything in the outside world, they need to
+be able to call the JS APIs of whatever environment (browser, node, etc)
+they're running in, and that means interop. Ideally most programmers can rely
+on libraries to do this heavy lifting and won't to have to touch iterop
+themselves, but nonetheless is has to go somewhere.
+
+Currently interop works, but only for JS functions that conform to Spruce's
+rather restrictive naming rules. So for example `console.log` won't work,
+because Spruce doesn't allow a `.` in a function name.
+
 ## Parser
 
 | Feature | Status |

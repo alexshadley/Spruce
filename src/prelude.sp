@@ -1,3 +1,5 @@
+interop printInt(x: Int) -> ()
+
 type Bool {
     True
     False
