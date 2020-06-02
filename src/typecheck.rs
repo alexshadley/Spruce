@@ -257,12 +257,30 @@ fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<n
 }
 
 fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
     let mut arg_types = Vec::new();
-    for arg in &func.val.args {
+    let mut arg_ann_types = Vec::new();
+    for (arg, ann) in &func.val.args {
         let arg_tvar = env.new_tvar();
         env.insert_sym_type(*arg, arg_tvar.clone());
         arg_types.push(Box::from(arg_tvar));
+
+        match ann {
+            Some(a) => {
+                arg_ann_types.push(
+                    Box::from(type_from_annotation(env, a.clone(), &mut local_tvars))
+                );
+            }
+            None => ()
+        }
     }
+
+    let out_ann_type = match &func.val.out_ann {
+        Some(ann) => Some(type_from_annotation(env, ann.clone(), &mut local_tvars)),
+        None => None
+    };
+
     let ret_tvar = env.new_tvar();
     let fn_type = Type::Func(arg_types, Box::from(ret_tvar.clone()));
     let body_subs = check_body(env, &func.val.body, &ret_tvar)?;
@@ -287,13 +305,78 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, Spruce
             };
         }
         None => {
-            env.insert_sym_type(func.val.name, refined_fn_type);
+            // it's fairly unclear that we insert the fn type here, then
+            // modify it in the block below. This code needs to be
+            // refactored
+            env.insert_sym_type(func.val.name, refined_fn_type.clone());
         }
     };
+
+    // check that the annotated type (if given) matches the checked type
+    match (arg_ann_types.len() == func.val.args.len(), out_ann_type) {
+        (true, Some(out_type)) => {
+            let ann_type = Type::Func(arg_ann_types, Box::from(out_type));
+            // maybe should pull from env instead of using refined_fn_type?
+            let ann_subs = unify(&refined_fn_type, &ann_type, &func.info)?;
+
+            // if unification between ann_type and refined_fn_type refined
+            // ann_type, that means our annotation was wrong
+            if apply(&ann_subs, ann_type.clone()) != ann_type {
+                return Err(SpruceErr{
+                    message: format!("Annotated type is less specific than actual type: \nAnnotated: {}\nActual: {}",
+                        ann_type.as_str_debug(),
+                        refined_fn_type.as_str_debug()),
+                    info: func.info.clone()
+                })
+            }
+            
+            env.apply_subs(&ann_subs)
+        }
+        _ => ()
+    }
 
     env.flush_active_symbols();
 
     Ok(true)
+}
+
+
+// Converts type annotations to types. Practically, this means stripping out
+// the AST metadata stored in TypeAnnotationNode and replacing TParamIDs with
+// proper TVars
+fn type_from_annotation(env: &mut Environment, ann: na::TypeAnnotationNode, local_tvars: &mut HashMap::<na::TParamID, TVarID>) -> Type {
+    match ann.val {
+        na::TypeAnnotation::TVar(id) => {
+            match local_tvars.get(&id) {
+                Some(tvar_id) => Type::TVar(*tvar_id),
+                None => {
+                    let tvar = env.new_tvar();
+                    match tvar {
+                        Type::TVar(tvar_id) => {
+                            local_tvars.insert(id, tvar_id);
+                        }
+                        _ => unreachable!()
+                    }
+                    tvar
+                }
+            }
+        }
+        na::TypeAnnotation::Unit => Type::Unit,
+        na::TypeAnnotation::Prim(name) => Type::Prim(name),
+        na::TypeAnnotation::ADT(id, args) => {
+            let types = args.into_iter().map(|arg| { 
+                Box::from(type_from_annotation(env, *arg, local_tvars))
+            }).collect();
+            Type::ADT(id, types)
+        }
+        na::TypeAnnotation::Func(args, out) => {
+            let types = args.into_iter().map(|arg| { 
+                Box::from(type_from_annotation(env, *arg, local_tvars))
+            }).collect();
+            let out_type = Box::from(type_from_annotation(env, *out, local_tvars));
+            Type::Func(types, out_type)
+        }
+    }
 }
 
 
