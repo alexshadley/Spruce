@@ -180,6 +180,19 @@ pub struct TypeAnnotationNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct InteropFunc {
+    pub name: SymbolID,
+    pub args: Vec<TypeAnnotationNode>,
+    pub out_ann: TypeAnnotationNode
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InteropFuncNode {
+    pub val: InteropFunc,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
     pub args: Vec<(SymbolID, Option<TypeAnnotationNode>)>,
@@ -206,6 +219,7 @@ pub struct InternalTypes {
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
+    pub interop_functions: Vec<InteropFuncNode>,
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
     pub symbol_table: SymbolTable,
@@ -216,11 +230,16 @@ pub struct Prog {
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     let mut type_table = analyze_types(&prog)?;
-    let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
+    let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
 
     let mut defs = Vec::new();
     for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
         defs.push(check_global(&mut sym_table, &type_table, def, target)?);
+    }
+
+    let mut interops = Vec::new();
+    for (interop, id) in prog.interop_functions.iter().zip(interop_ids.into_iter()) {
+        interops.push(check_interop(&mut sym_table, &mut type_table, interop, id)?);
     }
 
     let mut funcs = Vec::new();
@@ -239,6 +258,7 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     };
 
     let out_prog = Prog {
+        interop_functions: interops,
         functions: funcs, 
         definitions: defs,
         symbol_table: sym_table,
@@ -345,9 +365,18 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
+
+    let mut interop_ids = Vec::new();
+    for func in &prog.interop_functions {
+        if table.conflicts(&func.val.name) {
+            return Err(double_decl(&func.val.name, func.info.clone()));
+        }
+        let id = table.attempt_insert(&func.val.name, SymbolType::Function).expect("unreachable");
+        interop_ids.push(id);
+    }
 
     let mut fn_ids = Vec::new();
     for func in &prog.functions {
@@ -394,7 +423,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
         });
     }
     
-    Ok((table, fn_ids, tgts))
+    Ok((table, interop_ids, fn_ids, tgts))
 }
 
 fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, SpruceErr> {
@@ -409,6 +438,45 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
         }
         _ => unreachable!()
     }
+}
+
+/// the arg names in an interop definition don't matter (they will never be
+/// referenced, since the interop has no body), so we don't add these symbols
+/// to the table
+fn check_interop(table: &mut SymbolTable, types: &mut TypeTable, func: &parser::InteropFuncNode, id: SymbolID) -> Result<InteropFuncNode, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
+    let mut arg_anns = Vec::new();
+    for (_arg, ann) in &func.val.args {
+        match ann {
+            Some(a) => {
+                arg_anns.push(
+                    check_annotation(table, types, a, &mut local_tvars)?
+                );
+            }
+            None => {
+                return Err(SpruceErr {
+                    message: String::from("interop functions must specify all argument types"),
+                    info: func.info.clone()
+                });
+            }
+        }
+    }
+
+    let checked_out_ann = match &func.val.out_ann {
+        Some(ann) => check_annotation(table, types, &ann, &mut local_tvars)?,
+        None => {
+            return Err(SpruceErr {
+                message: String::from("interop functions must specify return types"),
+                info: func.info.clone()
+            });
+        }
+    };
+
+    Ok(InteropFuncNode {
+        val: InteropFunc {name: id, args: arg_anns, out_ann: checked_out_ann},
+        info: func.info.clone()
+    })
 }
 
 fn check_function(table: &mut SymbolTable, types: &mut TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {

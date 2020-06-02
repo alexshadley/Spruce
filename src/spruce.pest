@@ -1,6 +1,6 @@
 file = _{ SOI ~ (top_stmt | empty_line)* ~ EOI }
 
-top_stmt = _{ ( function_decl | type_decl | assign ) ~ "\n" }
+top_stmt = _{ ( interop_decl | function_decl | type_decl | assign ) ~ "\n" }
 stmt = _{ ( assign | fn_call | case ) ~ "\n" }
 
 type_decl = { "type" ~ up_id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
@@ -8,6 +8,8 @@ type_params = { ("(" ~ lo_id ~ ("," ~ lo_id)* ~ ")")? }
 type_option = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? }
 
 type_id = { up_id ~ ("(" ~ type_id ~ ("," ~ type_id)* ~ ")")? | lo_id }
+
+interop_decl = { "interop" ~ lo_id ~ fn_args }
 
 function_decl = { lo_id ~ fn_args ~ "{\n" ~ body ~ "}" }
 fn_args = { "(" ~ (fn_arg ~ ("," ~ fn_arg)*)? ~ ")" ~ ("->" ~ type_ann)? }

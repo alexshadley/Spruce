@@ -1,5 +1,9 @@
 // Helper functions for Spruce codegen
 
+function printInt(i) {
+    console.log(i);
+}
+
 function _to_bool(b) {
     if (b) {
         return [Bool.TRUE]

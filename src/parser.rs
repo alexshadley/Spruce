@@ -219,6 +219,19 @@ pub struct TypeAnnotationNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct InteropFunc {
+    pub name: String,
+    pub args: Vec<(String, Option<TypeAnnotationNode>)>,
+    pub out_ann: Option<TypeAnnotationNode>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InteropFuncNode {
+    pub val: InteropFunc,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: String,
     pub args: Vec<(String, Option<TypeAnnotationNode>)>,
@@ -234,6 +247,7 @@ pub struct FuncNode {
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
+    pub interop_functions: Vec<InteropFuncNode>,
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
     pub types: Vec<TypeNode>
@@ -487,13 +501,7 @@ fn to_type_annotation(mut p: Pair<Rule>, file_name: &String) -> TypeAnnotationNo
     }
 }
 
-fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
-    let func_span = p.as_span();
-    let mut func = p.into_inner();
-
-    let id = String::from(func.next().unwrap().as_str());
-
-    let args = func.next().unwrap();
+fn to_args(mut args: Pair<Rule>, file_name: &String) -> (Vec<(String, Option<TypeAnnotationNode>)>, Option<TypeAnnotationNode>) {
     let mut arg_vec = Vec::new();
     let mut out_ann = None;
     for arg in args.into_inner() {
@@ -519,6 +527,39 @@ fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
             _ => unreachable!()
         }
     }
+
+    (arg_vec, out_ann)
+}
+
+fn to_interop(mut p: Pair<Rule>, file_name: &String) -> InteropFuncNode {
+    let interop_span = p.as_span();
+    let mut interop = p.into_inner();
+
+    let id = String::from(interop.next().unwrap().as_str());
+
+    let args = interop.next().unwrap();
+    let (arg_vec, out_ann) = to_args(args, file_name);
+
+    let val = InteropFunc {
+        name: id,
+        args: arg_vec,
+        out_ann: out_ann
+    };
+
+    InteropFuncNode {
+        val: val,
+        info: NodeInfo {span: Span::from(interop_span), file: file_name.clone()}
+    }
+}
+
+fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
+    let func_span = p.as_span();
+    let mut func = p.into_inner();
+
+    let id = String::from(func.next().unwrap().as_str());
+
+    let args = func.next().unwrap();
+    let (arg_vec, out_ann) = to_args(args, file_name);
 
     let body = to_body(func.next().unwrap(), file_name);
 
@@ -606,11 +647,15 @@ fn to_type(mut t: Pair<Rule>, file_name: &String) -> TypeNode {
 fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     let mut stmts = Vec::new();
     let mut functions = Vec::new();
+    let mut interop_functions = Vec::new();
     let mut types = Vec::new();
 
     for (file, name) in files {
         for element in file {
             match element.as_rule() {
+                Rule::interop_decl => {
+                    interop_functions.push( to_interop(element, &name) );
+                }
                 Rule::function_decl => {
                     functions.push( to_func(element, &name) );
                 }
@@ -627,6 +672,7 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     }
 
     Prog {
+        interop_functions: interop_functions,
         functions: functions,
         definitions: stmts,
         types: types

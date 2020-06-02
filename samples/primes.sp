@@ -43,6 +43,7 @@ isFactor(x, y) {
     x % y == 0
 }
 
+
 main() {
     nums = range(3, 1000)
     filter(nums, isPrime)

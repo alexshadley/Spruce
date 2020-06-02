@@ -219,6 +219,10 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     }
     env.flush_active_symbols();
 
+    for interop in &prog.interop_functions {
+        check_interop(&mut env, interop)?;
+    }
+
     for stmt in &prog.definitions {
         match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
@@ -254,6 +258,28 @@ fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<n
             Type::Prim(s.clone())
         }
     }
+}
+
+fn check_interop(env: &mut Environment, interop: &na::InteropFuncNode) -> Result<bool, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
+    let mut args = Vec::new();
+    for arg in &interop.val.args {
+        args.push(Box::from(
+            type_from_annotation(env, arg.clone(), &mut local_tvars)
+        ));
+    }
+
+    let out = Box::from(
+        type_from_annotation(env, interop.val.out_ann.clone(), &mut local_tvars)
+    );
+    env.insert_sym_type(
+        interop.val.name,
+        Type::Func(args, out)
+    );
+    env.flush_active_symbols();
+
+    Ok(true)
 }
 
 fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, SpruceErr> {
