@@ -146,26 +146,31 @@ f() {
 }
 
 #[test]
-fn test_type() {
+fn test_curry() {
     let pass_prog = "
-type FooBar(a, b) {
-    Foo(a)
-    Bar(b)
-}
-
-func(fb) {
-    case fb {
-        Foo(v) -> True
-        Bar(b) -> b
-    }
+add(x, y) {
+    x + y
 }
 
 main() {
-    fb = Foo(3)
-    res = func(fb)
+    add3 = add@(3, _)
+    add3(5)
+}
+";
 
-    fb2 = Bar(True)
-    res2 = func(fb2)
+    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude.as_str(), String::from("prelude")), (pass_prog, String::from("Main"))];
+    let res = compile(files);
+    assert_eq!(res.is_ok(), true);
+
+    let pass_prog = "
+add(x, y) {
+    x + y
+}
+
+main() {
+    myList = Cons(Cons(Nil, 2), 1)
+    listMap(myList, add@(3, _))
 }
 ";
 
@@ -175,24 +180,13 @@ main() {
     assert_eq!(res.is_ok(), true);
 
     let fail_prog = "
-type FooBar(a, b) {
-    Foo(a)
-    Bar(b)
-}
-
-func(fb) {
-    case fb {
-        Foo(v) -> True
-        Bar(b) -> b
-    }
+add(x, y) {
+    x + y
 }
 
 main() {
-    fb = Foo(3)
-    res = func(fb)
-
-    fb2 = Bar(2)
-    res2 = func(fb2)
+    myList = Cons(Cons(Nil), 2), 1)
+    listMap(myList, add@(True, _))
 }
 ";
 
