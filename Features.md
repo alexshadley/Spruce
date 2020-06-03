@@ -11,7 +11,7 @@ exists to coordinate the work of building new features.
 | Int | :heavy_check_mark: |
 | Float| |
 | Char | |
-| String | |
+| String | :heavy_check_mark: |
 | Tuple | |
 | Record / Struct | |
 

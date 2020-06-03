@@ -7,7 +7,6 @@ extern crate lazy_static;
 use std::fs;
 use std::env;
 use std::path::Path;
-use std::collections::HashMap;
 
 mod parser;
 mod error;

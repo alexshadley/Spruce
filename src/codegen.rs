@@ -81,7 +81,7 @@ fn gen_body(prog: &Prog, env: &Environment, body_node: &BodyNode, indent: usize)
     });
 
     let val_handle = match (&body.expr, body.stmts.last()) {
-        (Some(expr), _) => Some(String::from("_body_val")),
+        (Some(_expr), _) => Some(String::from("_body_val")),
         (_, Some(stmt)) => {
             let (_, stmt_val) = gen_stmt(prog, env, stmt, indent);
             stmt_val
@@ -256,7 +256,7 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
         Expr::Subt(left, right) => format!("({} - {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Mult(left, right) => format!("({} * {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Div(left, right) => format!("(~~({} / {}))", gen_expr(prog, left), gen_expr(prog, right)),
-        Expr::Pow(left, right) => unimplemented!(),
+        Expr::Pow(_left, _right) => unimplemented!(),
         Expr::Mod(left, right) => format!("({} % {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Eq(left, right) => format!("_to_bool({} == {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::NotEq(left, right) => format!("_to_bool({} != {})", gen_expr(prog, left), gen_expr(prog, right)),
@@ -264,7 +264,9 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
         Expr::GtEq(left, right) => format!("_to_bool({} >= {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Lt(left, right) => format!("_to_bool({} < {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Gt(left, right) => format!("_to_bool({} > {})", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::Concat(left, right) => format!("({}.concat({}))", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Lit(l) => format!("{}", l),
+        Expr::StringLit(s)=> format!("{}", s),
         Expr::Id(id) => gen_sym(&prog.symbol_table, id),
         Expr::FnCall(fn_id, args) => {
             let mut output = format!("{}(", gen_sym(&prog.symbol_table, fn_id).to_owned());

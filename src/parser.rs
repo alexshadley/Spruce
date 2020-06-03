@@ -25,6 +25,7 @@ lazy_static! {
             Operator::new(add, Left) | Operator::new(subtract, Left),
             Operator::new(multiply, Left) | Operator::new(divide, Left),
             Operator::new(power, Right),
+            Operator::new(concat, Left),
         ])
     };
 }
@@ -59,12 +60,14 @@ pub enum Expr {
     Curry(String, Vec<Option<Box<ExprNode>>>),
     Id(String),
     Lit(f64),
+    StringLit(String),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
     GtEq(Box<ExprNode>, Box<ExprNode>),
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
+    Concat(Box<ExprNode>, Box<ExprNode>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -270,6 +273,10 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                 val: Expr::Lit(pair.as_str().parse::<f64>().unwrap()),
                 info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
             },
+            Rule::string => ExprNode {
+                val: Expr::StringLit(String::from(pair.as_str())),
+                info: NodeInfo {span: Span::from(pair.as_span()), file:file_name.clone()}
+            },
             Rule::expr => to_expr(pair, file_name),
             Rule::fn_call => {
                 let pair_span = pair.as_span();
@@ -335,6 +342,7 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                 Rule::gt_eq    => Expr::GtEq(Box::from(lhs), Box::from(rhs)),
                 Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
                 Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
+                Rule::concat   => Expr::Concat(Box::from(lhs), Box::from(rhs)),
                 _ => unreachable!(),
             };
 
@@ -624,7 +632,7 @@ fn to_type_option(option: Pair<Rule>, file_name: &String) -> TypeOptionNode {
 }
 
 fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
-    let ident_span = ident.as_span();
+    let _ident_span = ident.as_span();
 
     let mut children = ident.into_inner();
 
@@ -640,14 +648,14 @@ fn to_type_identifier(ident: Pair<Rule>) -> TypeIdentifier {
     }
 }
 
-fn to_type(mut t: Pair<Rule>, file_name: &String) -> TypeNode {
+fn to_type(t: Pair<Rule>, file_name: &String) -> TypeNode {
     let type_span = t.as_span();
     let mut children = t.into_inner();
 
     let name = String::from(children.next().unwrap().as_str());
 
     let mut params = Vec::new();
-    let mut param_tokens = children.next().unwrap().into_inner();
+    let param_tokens = children.next().unwrap().into_inner();
     for param_token in param_tokens {
         params.push(String::from(param_token.as_str()));
     }

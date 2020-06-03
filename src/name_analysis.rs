@@ -43,12 +43,14 @@ pub enum Expr {
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<ExprNode>>),
     Lit(f64),
+    StringLit(String),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
     GtEq(Box<ExprNode>, Box<ExprNode>),
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
+    Concat(Box<ExprNode>, Box<ExprNode>),
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -755,6 +757,8 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
 
         parser::Expr::Lit(val) => Ok(Expr::Lit(*val)),
 
+        parser::Expr::StringLit(val) => Ok(Expr::StringLit(val.clone())),
+
         parser::Expr::Add(l, r) => {
             let left = check_expr(table, types, &*l)?;
             let right = check_expr(table, types, &*r)?;
@@ -814,6 +818,11 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
             let left = check_expr(table, types, &*l)?;
             let right = check_expr(table, types, &*r)?;
             Ok(Expr::Gt(Box::from(left), Box::from(right)))
+        }
+        parser::Expr::Concat(l, r) => {
+            let left = check_expr(table, types, &*l)?;
+            let right = check_expr(table, types, &*r)?;
+            Ok(Expr::Concat(Box::from(left), Box::from(right)))
         }
 
         parser::Expr::FnCall(fn_name, args) => {
@@ -991,8 +1000,8 @@ impl TypeTable {
 
     fn to_ext(self) -> TypeTableExt {
         TypeTableExt {
-            types: self.types.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
-            values: self.values.into_iter().map(|(k, v)| {(v.id, v)}).collect(),
+            types: self.types.into_iter().map(|(_k, v)| {(v.id, v)}).collect(),
+            values: self.values.into_iter().map(|(_k, v)| {(v.id, v)}).collect(),
             primitives: self.primitives
         }
     }

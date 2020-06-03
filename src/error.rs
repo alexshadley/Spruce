@@ -1,5 +1,4 @@
 extern crate pest;
-use pest::Position;
 
 use crate::parser::{NodeInfo};
 
@@ -11,7 +10,7 @@ pub struct SpruceErr {
 
 impl SpruceErr {
     pub fn as_str(&self, files: &Vec<(&str, String)>) -> String {
-        let (file, file_name) = files.iter().filter(|(_, file_name)| {*file_name == self.info.file}).next().expect(format!("could not find file while reporting error: {}", self.info.file).as_str());
+        let (file, _file_name) = files.iter().filter(|(_, file_name)| {*file_name == self.info.file}).next().expect(format!("could not find file while reporting error: {}", self.info.file).as_str());
 
         let pos = pest::Position::new(file, self.info.span.start).expect("Failed to find position in error");
         let (line, col) = pos.line_col();
