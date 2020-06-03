@@ -711,6 +711,52 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             Ok(subs)
         }
 
+        na::Expr::Curry(id, args) => {
+            let mut subs = HashMap::new();
+            let mut arg_types = Vec::new();
+            // new tvars created from blanks (_) will be added to new_args
+            let mut new_args = Vec::new();
+            for arg in args {
+                // if an arg was supplied, typecheck it; otherwise, just make a
+                // new tvar for it
+                match arg {
+                    Some(a) => {
+                        let arg_tvar = env.new_tvar();
+                        let arg_subs = typecheck(env, &*a, &arg_tvar)?;
+                        arg_types.push(Box::from(apply(&arg_subs, arg_tvar)));
+                        subs.extend(arg_subs);
+                    }
+                    None => {
+                        let arg_tvar = env.new_tvar();
+                        arg_types.push(Box::from(arg_tvar.clone()));
+                        new_args.push(Box::from(arg_tvar));
+                    }
+                }
+            }
+
+            let out_tvar = env.new_tvar();
+
+            let fn_type = Type::Func(arg_types, Box::from(out_tvar.clone()));
+
+            let fn_sym_type = match env.get_sym_type(&id) {
+                Some(sym) => sym.clone(),
+                None => {
+                    let fn_tvar = env.new_tvar();
+                    env.insert_sym_type(*id, fn_tvar.clone());
+                    fn_tvar
+                }
+            };
+            let fn_subs = unify(&fn_sym_type, &fn_type, &expr.info)?;
+            subs.extend(fn_subs);
+
+            // the final type, after currying
+            let final_type = Type::Func(new_args, Box::from(out_tvar));
+            let final_subs = unify(&ty, &final_type, &expr.info)?;
+            subs.extend(final_subs);
+
+            Ok(subs)
+        }
+
         na::Expr::ADTVal(id, args) => {
             let mut subs = HashMap::new();
             let mut arg_types = Vec::new();

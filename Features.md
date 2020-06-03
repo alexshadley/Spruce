@@ -57,8 +57,18 @@ lists. Defining lists this way need not be set in stone.
 |---------|--------|
 | Basic Functions | :heavy_check_mark: |
 | Anonymous (lambda) functions | |
-| Closures | |
+| Closures | :heavy_check_mark: |
 | Optional Arguments | |
+
+Closures in Spruce are implemented as currying. For example:
+
+```
+add(x: Int, y: Int) -> Int {
+    x + y
+}
+
+add3 = add@(3, _)
+```
 
 ## Type System
 
