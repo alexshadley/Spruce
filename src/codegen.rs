@@ -266,7 +266,7 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
         Expr::GtEq(left, right) => format!("_to_bool({} >= {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Lt(left, right) => format!("_to_bool({} < {})", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Gt(left, right) => format!("_to_bool({} > {})", gen_expr(prog, left), gen_expr(prog, right)),
-        Expr::Concat(left, right) => format!("(\'{}\'.concat({}))", gen_expr(prog, left), gen_expr(prog, right)),
+        Expr::Concat(left, right) => format!("({}.concat({}))", gen_expr(prog, left), gen_expr(prog, right)),
         Expr::Lit(l) => format!("{}", l),
         Expr::StringLit(s)=> format!("{}", s),
         Expr::Id(id) => gen_sym(&prog.symbol_table, id),
