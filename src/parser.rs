@@ -208,10 +208,38 @@ pub struct TypeOptionNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum TypeAnnotation {
+    Unit,
+    ADT(String, Vec<Box<TypeAnnotationNode>>),
+    TVar(String),
+    Func(Vec<Box<TypeAnnotationNode>>, Box<TypeAnnotationNode>)
+}
+
+#[derive(Debug, PartialEq)]
+pub struct TypeAnnotationNode {
+    pub val: TypeAnnotation,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InteropFunc {
+    pub name: String,
+    pub args: Vec<(String, Option<TypeAnnotationNode>)>,
+    pub out_ann: Option<TypeAnnotationNode>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct InteropFuncNode {
+    pub val: InteropFunc,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: String,
-    pub args: Vec<String>,
-    pub body: BodyNode
+    pub args: Vec<(String, Option<TypeAnnotationNode>)>,
+    pub body: BodyNode,
+    pub out_ann: Option<TypeAnnotationNode>
 }
 
 #[derive(Debug, PartialEq)]
@@ -222,6 +250,7 @@ pub struct FuncNode {
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
+    pub interop_functions: Vec<InteropFuncNode>,
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
     pub types: Vec<TypeNode>
@@ -231,7 +260,11 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
     PREC_CLIMBER.climb(
         expr.into_inner(),
         |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::id => ExprNode {
+            Rule::up_id => ExprNode {
+                val: Expr::Id(String::from(pair.as_str())),
+                info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
+            },
+            Rule::lo_id => ExprNode {
                 val: Expr::Id(String::from(pair.as_str())),
                 info: NodeInfo {span: Span::from(pair.as_span()), file: file_name.clone()}
             },
@@ -245,6 +278,18 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
             },
             Rule::expr => to_expr(pair, file_name),
             Rule::fn_call => {
+                let pair_span = pair.as_span();
+
+                let mut children = pair.into_inner();
+                let id = String::from(children.next().unwrap().as_str());
+                let args = children.into_iter().map(|arg| { Box::from(to_expr(arg, file_name)) }).collect();
+
+                ExprNode {
+                    val: Expr::FnCall(id, args),
+                    info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
+                }
+            }
+            Rule::val_call => {
                 let pair_span = pair.as_span();
 
                 let mut children = pair.into_inner();
@@ -382,7 +427,7 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
             let tgt = children.next().unwrap();
             let tgt_span = tgt.as_span();
             let target_val = match tgt.as_rule() {
-                Rule::id => Target::Var(String::from(tgt.as_str())),
+                Rule::lo_id => Target::Var(String::from(tgt.as_str())),
                 Rule::mutable_tgt => Target::Mutable(String::from(tgt.into_inner().next().unwrap().as_str())),
                 Rule::update_tgt => Target::Update(String::from(tgt.into_inner().next().unwrap().as_str())),
                 _ => unreachable!()
@@ -420,24 +465,117 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
     }
 }
 
-fn to_func(p: Pair<Rule>, file_name: &String) -> FuncNode {
+fn to_type_annotation(mut p: Pair<Rule>, file_name: &String) -> TypeAnnotationNode {
+    let ann_span = p.as_span();
+    let type_ann = match p.as_rule() {
+        Rule::unit => TypeAnnotation::Unit,
+        Rule::tvar => TypeAnnotation::TVar(
+            String::from(p.as_str())
+        ),
+        Rule::adt => {
+            let mut children = p.into_inner();
+            let id = String::from(
+                children.next().unwrap().as_str()
+            );
+
+            let mut args = Vec::new();
+            for arg in children {
+                args.push(
+                    Box::from(to_type_annotation(arg, file_name))
+                );
+            }
+            TypeAnnotation::ADT(id, args)
+        }
+        Rule::func => {
+            let mut children = p.into_inner();
+            let mut sub_exprs = Vec::new();
+            for c in children {
+                sub_exprs.push(
+                    Box::from(to_type_annotation(c, file_name))
+                );
+            }
+
+            let out = sub_exprs.pop().expect("unreachable");
+            TypeAnnotation::Func(sub_exprs, out)
+        }
+        _ => unreachable!()
+    };
+    TypeAnnotationNode {
+        val: type_ann,
+        info: NodeInfo {
+            span: Span::from(ann_span),
+            file: file_name.clone()
+        }
+    }
+}
+
+fn to_args(mut args: Pair<Rule>, file_name: &String) -> (Vec<(String, Option<TypeAnnotationNode>)>, Option<TypeAnnotationNode>) {
+    let mut arg_vec = Vec::new();
+    let mut out_ann = None;
+    for arg in args.into_inner() {
+        match arg.as_rule() {
+            Rule::fn_arg => {
+                let mut arg_parts = arg.into_inner();
+                let id = String::from(
+                    arg_parts.next().unwrap().as_str()
+                );
+                let ann = match arg_parts.next() {
+                    Some(annotation) => {
+                        Some(to_type_annotation(annotation, file_name))
+                    }
+                    None => {
+                        None
+                    }
+                };
+                arg_vec.push((id, ann));
+            }
+            Rule::func | Rule::unit | Rule::adt | Rule::tvar => {
+                out_ann = Some(to_type_annotation(arg, file_name))
+            }
+            _ => unreachable!()
+        }
+    }
+
+    (arg_vec, out_ann)
+}
+
+fn to_interop(mut p: Pair<Rule>, file_name: &String) -> InteropFuncNode {
+    let interop_span = p.as_span();
+    let mut interop = p.into_inner();
+
+    let id = String::from(interop.next().unwrap().as_str());
+
+    let args = interop.next().unwrap();
+    let (arg_vec, out_ann) = to_args(args, file_name);
+
+    let val = InteropFunc {
+        name: id,
+        args: arg_vec,
+        out_ann: out_ann
+    };
+
+    InteropFuncNode {
+        val: val,
+        info: NodeInfo {span: Span::from(interop_span), file: file_name.clone()}
+    }
+}
+
+fn to_func(mut p: Pair<Rule>, file_name: &String) -> FuncNode {
     let func_span = p.as_span();
     let mut func = p.into_inner();
 
     let id = String::from(func.next().unwrap().as_str());
 
     let args = func.next().unwrap();
-    let mut arg_vec = Vec::new();
-    for arg in args.into_inner() {
-        arg_vec.push(String::from(arg.as_str()));
-    }
+    let (arg_vec, out_ann) = to_args(args, file_name);
 
     let body = to_body(func.next().unwrap(), file_name);
 
     let func = Func {
         name: id,
         args: arg_vec,
-        body: body
+        body: body,
+        out_ann: out_ann
     };
 
     FuncNode {
@@ -517,11 +655,15 @@ fn to_type(t: Pair<Rule>, file_name: &String) -> TypeNode {
 fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     let mut stmts = Vec::new();
     let mut functions = Vec::new();
+    let mut interop_functions = Vec::new();
     let mut types = Vec::new();
 
     for (file, name) in files {
         for element in file {
             match element.as_rule() {
+                Rule::interop_decl => {
+                    interop_functions.push( to_interop(element, &name) );
+                }
                 Rule::function_decl => {
                     functions.push( to_func(element, &name) );
                 }
@@ -538,6 +680,7 @@ fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
     }
 
     Prog {
+        interop_functions: interop_functions,
         functions: functions,
         definitions: stmts,
         types: types

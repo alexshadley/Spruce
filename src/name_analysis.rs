@@ -166,35 +166,40 @@ pub struct TargetNode {
     pub info: NodeInfo
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Type {
-    pub name: String,
-    pub options: Vec<TypeOptionNode>
+#[derive(Debug, PartialEq, Clone)]
+pub enum TypeAnnotation {
+    Unit,
+    ADT(ADTID, Vec<Box<TypeAnnotationNode>>),
+    Prim(String),
+    TVar(TParamID),
+    Func(Vec<Box<TypeAnnotationNode>>, Box<TypeAnnotationNode>)
 }
 
-#[derive(Debug, PartialEq)]
-pub struct TypeNode {
-    pub val: Type,
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypeAnnotationNode {
+    pub val: TypeAnnotation,
     pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TypeOption {
-    pub name: String,
-    pub args: Vec<String>
+pub struct InteropFunc {
+    pub name: SymbolID,
+    pub args: Vec<TypeAnnotationNode>,
+    pub out_ann: TypeAnnotationNode
 }
 
 #[derive(Debug, PartialEq)]
-pub struct TypeOptionNode {
-    pub val: TypeOption,
+pub struct InteropFuncNode {
+    pub val: InteropFunc,
     pub info: NodeInfo
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Func {
     pub name: SymbolID,
-    pub args: Vec<SymbolID>,
-    pub body: BodyNode
+    pub args: Vec<(SymbolID, Option<TypeAnnotationNode>)>,
+    pub body: BodyNode,
+    pub out_ann: Option<TypeAnnotationNode>
 }
 
 #[derive(Debug, PartialEq)]
@@ -216,9 +221,9 @@ pub struct InternalTypes {
 
 #[derive(Debug, PartialEq)]
 pub struct Prog {
+    pub interop_functions: Vec<InteropFuncNode>,
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
-    pub types: Vec<TypeNode>,
     pub symbol_table: SymbolTable,
     pub type_table: TypeTableExt,
     pub internal_types: InternalTypes
@@ -226,17 +231,22 @@ pub struct Prog {
 
 
 pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
-    let (types, type_table) = analyze_types(&prog)?;
-    let (mut sym_table, fn_ids, targets) = collect_decls(&prog)?;
+    let mut type_table = analyze_types(&prog)?;
+    let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
 
     let mut defs = Vec::new();
     for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
         defs.push(check_global(&mut sym_table, &type_table, def, target)?);
     }
 
+    let mut interops = Vec::new();
+    for (interop, id) in prog.interop_functions.iter().zip(interop_ids.into_iter()) {
+        interops.push(check_interop(&mut sym_table, &mut type_table, interop, id)?);
+    }
+
     let mut funcs = Vec::new();
     for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
-        funcs.push(check_function(&mut sym_table, &type_table, func, id)?);
+        funcs.push(check_function(&mut sym_table, &mut type_table, func, id)?);
     }
     
     sym_table.pop_layer();
@@ -250,9 +260,9 @@ pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
     };
 
     let out_prog = Prog {
+        interop_functions: interops,
         functions: funcs, 
         definitions: defs,
-        types: types,
         symbol_table: sym_table,
         type_table: type_table.to_ext(),
         internal_types: internal_types
@@ -357,9 +367,18 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
+fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
+
+    let mut interop_ids = Vec::new();
+    for func in &prog.interop_functions {
+        if table.conflicts(&func.val.name) {
+            return Err(double_decl(&func.val.name, func.info.clone()));
+        }
+        let id = table.attempt_insert(&func.val.name, SymbolType::Function).expect("unreachable");
+        interop_ids.push(id);
+    }
 
     let mut fn_ids = Vec::new();
     for func in &prog.functions {
@@ -406,7 +425,7 @@ fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec
         });
     }
     
-    Ok((table, fn_ids, tgts))
+    Ok((table, interop_ids, fn_ids, tgts))
 }
 
 fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, SpruceErr> {
@@ -423,14 +442,65 @@ fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtN
     }
 }
 
-fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
+/// the arg names in an interop definition don't matter (they will never be
+/// referenced, since the interop has no body), so we don't add these symbols
+/// to the table
+fn check_interop(table: &mut SymbolTable, types: &mut TypeTable, func: &parser::InteropFuncNode, id: SymbolID) -> Result<InteropFuncNode, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
+    let mut arg_anns = Vec::new();
+    for (_arg, ann) in &func.val.args {
+        match ann {
+            Some(a) => {
+                arg_anns.push(
+                    check_annotation(table, types, a, &mut local_tvars)?
+                );
+            }
+            None => {
+                return Err(SpruceErr {
+                    message: String::from("interop functions must specify all argument types"),
+                    info: func.info.clone()
+                });
+            }
+        }
+    }
+
+    let checked_out_ann = match &func.val.out_ann {
+        Some(ann) => check_annotation(table, types, &ann, &mut local_tvars)?,
+        None => {
+            return Err(SpruceErr {
+                message: String::from("interop functions must specify return types"),
+                info: func.info.clone()
+            });
+        }
+    };
+
+    Ok(InteropFuncNode {
+        val: InteropFunc {name: id, args: arg_anns, out_ann: checked_out_ann},
+        info: func.info.clone()
+    })
+}
+
+fn check_function(table: &mut SymbolTable, types: &mut TypeTable, func: &parser::FuncNode, id: SymbolID) -> Result<FuncNode, SpruceErr> {
     table.push_layer();
 
+    let mut local_tvars = HashMap::new();
+
     let mut arg_symbols = Vec::new();
-    for arg in &func.val.args {
+    for (arg, ann) in &func.val.args {
         match table.attempt_insert(&arg, SymbolType::Const) {
             Some(id) => {
-                arg_symbols.push(id);
+                let checked_ann = match ann {
+                    Some(a) => {
+                        Some(
+                            check_annotation(table, types, a, &mut local_tvars)?
+                        )
+                    }
+                    None => None
+                };
+                arg_symbols.push(
+                    (id, checked_ann)
+                );
             }
             None => {
                 // TODO: implement variable shadowing with arguments
@@ -439,13 +509,77 @@ fn check_function(table: &mut SymbolTable, types: &TypeTable, func: &parser::Fun
         }
     }
 
+    let checked_out_ann = match &func.val.out_ann {
+        Some(ann) => Some(check_annotation(table, types, &ann, &mut local_tvars)?),
+        None => None
+    };
+
     let body = check_body(table, types, &func.val.body)?;
 
     table.pop_layer();
 
     Ok(FuncNode {
-        val: Func {name: id, args: arg_symbols, body: body},
+        val: Func {name: id, args: arg_symbols, body: body, out_ann: checked_out_ann},
         info: func.info.clone()
+    })
+}
+
+fn check_annotation(table: &mut SymbolTable, types: &mut TypeTable, ann: &parser::TypeAnnotationNode, local_tvars: &mut HashMap<String, TParamID>) -> Result<TypeAnnotationNode, SpruceErr> {
+    let ann_info = ann.info.clone();
+
+    let ann_val = match &ann.val {
+        parser::TypeAnnotation::Unit => TypeAnnotation::Unit,
+        parser::TypeAnnotation::TVar(name) => {
+            match local_tvars.get(name) {
+                Some(id) => TypeAnnotation::TVar(*id),
+                None => {
+                    let new_id = types.add_tparam(name);
+                    local_tvars.insert(name.clone(), new_id);
+                    TypeAnnotation::TVar(new_id)
+                }
+            }
+        }
+        parser::TypeAnnotation::ADT(name, subanns) => {
+            let mut checked_anns = Vec::new();
+            for subann in subanns {
+                checked_anns.push(
+                    Box::from(check_annotation(table, types, subann, local_tvars)?)
+                )
+            }
+
+            if types.primitives.contains(name) {
+                TypeAnnotation::Prim(name.clone())
+            }
+            else {
+                match types.get_type(&name) {
+                    Some(adt) => {
+                        TypeAnnotation::ADT(adt.id, checked_anns)
+                    }
+                    None => {
+                        return Err(undeclared(&name, ann_info));
+                    }
+                }
+            }
+        }
+        parser::TypeAnnotation::Func(args, out) => {
+            let mut checked_args = Vec::new();
+            for arg in args {
+                checked_args.push(
+                    Box::from(check_annotation(table, types, arg, local_tvars)?)
+                )
+            }
+
+            let checked_out = Box::from(
+                check_annotation(table, types, out, local_tvars)?
+            );
+            TypeAnnotation::Func(checked_args, checked_out)
+        }
+        _ => unimplemented!()
+    };
+
+    Ok(TypeAnnotationNode {
+        val: ann_val,
+        info: ann_info
     })
 }
 
@@ -745,7 +879,7 @@ pub enum TypeID {
     Prim(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ADTValue {
     pub id: ADTValID,
     pub name: String,
@@ -757,7 +891,8 @@ pub struct ADTValue {
 pub struct ADT {
     pub id: ADTID,
     pub type_params: Vec<TParamID>,
-    pub name: String
+    pub name: String,
+    pub values: Vec<ADTValID>
 }
 
 #[derive(Debug, PartialEq)]
@@ -797,21 +932,18 @@ impl TypeTable {
     }
 
     fn add_type(&mut self, name: &String, params: Vec<TParamID>) {
-        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params};
+        let new_adt = ADT {name: name.clone(), id: self.next_type_id, type_params: params, values: vec![]};
         self.next_type_id += 1;
         self.types.insert(name.clone(), new_adt);
     }
 
     fn add_value(&mut self, name: &String, args: &Vec<TypeID>, data_type: &String) {
-        let r = self.types.get_mut(data_type);
-        match r {
-            Some(adt) => {
-                let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
-                self.next_val_id += 1;
-                self.values.insert(new_val.name.clone(), new_val);
-            }
-            None => unreachable!()
-        }
+        let mut adt = self.types.get_mut(data_type).expect("unreachable");
+        adt.values.push(self.next_val_id);
+
+        let new_val = ADTValue {name: name.clone(), args: (*args).clone(), data_type: adt.id, id: self.next_val_id};
+        self.next_val_id += 1;
+        self.values.insert(new_val.name.clone(), new_val);
     }
 
     fn add_tparam(&mut self, name: &String) -> TParamID {
@@ -837,7 +969,7 @@ impl TypeTable {
     fn has_type(&self, name: &String) -> bool {
         self.types.contains_key(name) || self.primitives.contains(name)
     }
-    
+
     fn has_value(&self, name: &String) -> bool {
         self.values.contains_key(name)
     }
@@ -853,7 +985,7 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), SpruceErr>{
+fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, SpruceErr>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
@@ -899,22 +1031,7 @@ fn analyze_types(prog: & parser::Prog) -> Result<(Vec<TypeNode>, TypeTable), Spr
         }
     }
 
-    let new_types = prog.types.iter().map(|t| {
-        TypeNode {
-            val: Type {
-                name: t.val.name.clone(),
-                options: t.val.options.iter().map(|o| { 
-                    TypeOptionNode {
-                        val: TypeOption {name: o.val.name.clone(), args: o.val.args.iter().map(|id| {id.name.clone()}).collect() },
-                        info: o.info.clone()
-                    }
-                }).collect()
-            },
-            info: t.info.clone()
-        }
-    }).collect();
-
-    Ok((new_types, type_table))
+    Ok(type_table)
 }
 
 fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, SpruceErr> {

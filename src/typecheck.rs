@@ -10,7 +10,7 @@ type TVarID = u32;
 
 /// a type of a symbol, expression, etc
 #[derive(Clone, Debug, PartialEq)]
-enum Type {
+pub enum Type {
     Unit,
     Prim(String),
     TVar(TVarID),
@@ -123,6 +123,7 @@ pub struct Environment {
 
     adt_type: HashMap<na::ADTID, Type>,
     val_type: HashMap<na::ADTValID, Type>,
+    pub case_expr_type: HashMap<na::CaseID, Type>,
 
     // prelude adts are used internally, so we need to record their type ids
     internal_types: na::InternalTypes
@@ -136,6 +137,7 @@ impl Environment {
             active_sym_type: HashMap::new(), 
             val_type: HashMap::new(), 
             adt_type: HashMap::new(),
+            case_expr_type: HashMap::new(),
             internal_types: internal_types
         }
     }
@@ -216,6 +218,10 @@ pub fn check_prog(prog: &na::Prog) -> Result<Environment, SpruceErr> {
     }
     env.flush_active_symbols();
 
+    for interop in &prog.interop_functions {
+        check_interop(&mut env, interop)?;
+    }
+
     for stmt in &prog.definitions {
         match &stmt.val {
             na::Stmt::Assign(tgt, expr) => {
@@ -253,13 +259,53 @@ fn create_ident_type(ident: &na::TypeID, env: &Environment,  tparams: &HashMap<n
     }
 }
 
+fn check_interop(env: &mut Environment, interop: &na::InteropFuncNode) -> Result<bool, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
+    let mut args = Vec::new();
+    for arg in &interop.val.args {
+        args.push(Box::from(
+            type_from_annotation(env, arg.clone(), &mut local_tvars)
+        ));
+    }
+
+    let out = Box::from(
+        type_from_annotation(env, interop.val.out_ann.clone(), &mut local_tvars)
+    );
+    env.insert_sym_type(
+        interop.val.name,
+        Type::Func(args, out)
+    );
+    env.flush_active_symbols();
+
+    Ok(true)
+}
+
 fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, SpruceErr> {
+    let mut local_tvars = HashMap::new();
+
     let mut arg_types = Vec::new();
-    for arg in &func.val.args {
+    let mut arg_ann_types = Vec::new();
+    for (arg, ann) in &func.val.args {
         let arg_tvar = env.new_tvar();
         env.insert_sym_type(*arg, arg_tvar.clone());
         arg_types.push(Box::from(arg_tvar));
+
+        match ann {
+            Some(a) => {
+                arg_ann_types.push(
+                    Box::from(type_from_annotation(env, a.clone(), &mut local_tvars))
+                );
+            }
+            None => ()
+        }
     }
+
+    let out_ann_type = match &func.val.out_ann {
+        Some(ann) => Some(type_from_annotation(env, ann.clone(), &mut local_tvars)),
+        None => None
+    };
+
     let ret_tvar = env.new_tvar();
     let fn_type = Type::Func(arg_types, Box::from(ret_tvar.clone()));
     let body_subs = check_body(env, &func.val.body, &ret_tvar)?;
@@ -284,9 +330,35 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, Spruce
             };
         }
         None => {
-            env.insert_sym_type(func.val.name, refined_fn_type);
+            // it's fairly unclear that we insert the fn type here, then
+            // modify it in the block below. This code needs to be
+            // refactored
+            env.insert_sym_type(func.val.name, refined_fn_type.clone());
         }
     };
+
+    // check that the annotated type (if given) matches the checked type
+    match (arg_ann_types.len() == func.val.args.len(), out_ann_type) {
+        (true, Some(out_type)) => {
+            let ann_type = Type::Func(arg_ann_types, Box::from(out_type));
+            // maybe should pull from env instead of using refined_fn_type?
+            let ann_subs = unify(&refined_fn_type, &ann_type, &func.info)?;
+
+            // if unification between ann_type and refined_fn_type refined
+            // ann_type, that means our annotation was wrong
+            if apply(&ann_subs, ann_type.clone()) != ann_type {
+                return Err(SpruceErr{
+                    message: format!("Annotated type is less specific than actual type: \nAnnotated: {}\nActual: {}",
+                        ann_type.as_str_debug(),
+                        refined_fn_type.as_str_debug()),
+                    info: func.info.clone()
+                })
+            }
+            
+            env.apply_subs(&ann_subs)
+        }
+        _ => ()
+    }
 
     env.flush_active_symbols();
 
@@ -294,11 +366,50 @@ fn check_func(env: &mut Environment, func: &na::FuncNode) -> Result<bool, Spruce
 }
 
 
+// Converts type annotations to types. Practically, this means stripping out
+// the AST metadata stored in TypeAnnotationNode and replacing TParamIDs with
+// proper TVars
+fn type_from_annotation(env: &mut Environment, ann: na::TypeAnnotationNode, local_tvars: &mut HashMap::<na::TParamID, TVarID>) -> Type {
+    match ann.val {
+        na::TypeAnnotation::TVar(id) => {
+            match local_tvars.get(&id) {
+                Some(tvar_id) => Type::TVar(*tvar_id),
+                None => {
+                    let tvar = env.new_tvar();
+                    match tvar {
+                        Type::TVar(tvar_id) => {
+                            local_tvars.insert(id, tvar_id);
+                        }
+                        _ => unreachable!()
+                    }
+                    tvar
+                }
+            }
+        }
+        na::TypeAnnotation::Unit => Type::Unit,
+        na::TypeAnnotation::Prim(name) => Type::Prim(name),
+        na::TypeAnnotation::ADT(id, args) => {
+            let types = args.into_iter().map(|arg| { 
+                Box::from(type_from_annotation(env, *arg, local_tvars))
+            }).collect();
+            Type::ADT(id, types)
+        }
+        na::TypeAnnotation::Func(args, out) => {
+            let types = args.into_iter().map(|arg| { 
+                Box::from(type_from_annotation(env, *arg, local_tvars))
+            }).collect();
+            let out_type = Box::from(type_from_annotation(env, *out, local_tvars));
+            Type::Func(types, out_type)
+        }
+    }
+}
+
+
 fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<TSubst, SpruceErr> {
     let mut subs = HashMap::new();
 
     let expr_tvar = env.new_tvar();
-    let expr_subs = typecheck(env, &case.val.expr, &expr_tvar).expect("failed typecheck");
+    let expr_subs = typecheck(env, &case.val.expr, &expr_tvar)?;
     let expr_type = apply(&expr_subs, expr_tvar);
     env.apply_subs(&expr_subs);
     subs.extend(expr_subs);
@@ -343,8 +454,12 @@ fn check_case(env: &mut Environment, case: &na::CaseNode, ty: &Type) -> Result<T
     let adt_tvar_subs = refresh_tvars(env, &adt_type);
 
     let pattern_subs = unify(&apply(&adt_tvar_subs, adt_type), &expr_type, &case.info)?;
+
+    env.case_expr_type.insert(case.val.id, apply(&pattern_subs, expr_type.clone()));
+
     env.apply_subs(&pattern_subs);
     subs.extend(pattern_subs);
+
 
     let mut is_unit = false;
     let mut has_expr = false;

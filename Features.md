@@ -26,26 +26,30 @@ Char, as is done in Haskell.
 | Feature | Status |
 |---------|--------|
 | Lists | :heavy_check_mark: |
-| JS-backed Lists | |
+| JS-backed Lists | :heavy_check_mark: |
 | List Indexing (Python-style) | |
 | List Comprehension | |
 | List Iteration (for loop) | |
 
-Technically, Lists can currently be constructed in Spruce with ADTs as such:
+The Spruce approach to lists is experimental, and prone to change. This is the
+prelude definition of list:
 
 ```
-type List {
-    Cons(Float, List)
+type List(a) {
+    Cons(List(a), a)
     Nil
 }
 ```
 
-This is the list definition one might expect to see in functional languages.
-However, for performance reasons it probably makes more sense to back Spruce's
-lists with JavaScript lists. Ideally interfaces will make it possible for both
-versions of a list to be used in things like for loops. One of the main design
-goals of Spruce is to make list processing easy and expressive with a mix of
-functional and imperative concepts.
+Which is similar to how Haskell implements list, except with the two arguments
+of `Cons` swapped. The reasoning behind this is that JavaScript arrays (which
+Spruce arrays are directly backed by) have O(1) append time, and O(n) prepend
+time. This definition ensures that the `Cons` constructor works in constant
+time.
+
+While this rationale makes enough sense from a performance perspective, it has
+yet to be seen if this is a practical way to write software that operates on
+lists. Defining lists this way need not be set in stone.
 
 ## Functions
 
@@ -60,7 +64,7 @@ functional and imperative concepts.
 
 | Feature | Status |
 |---------|--------|
-| Type Annotations | |
+| Type Annotations | :heavy_check_mark: |
 | Type Inference | :heavy_check_mark: |
 | Type Aliases | |
 | Typeclasses | |
@@ -104,6 +108,18 @@ Pattern matching currently works to allow destructuring of ADT values, but
 cannot do anything useful with numeric types, or strings or tuples when those
 are implemented.
 
+## JS Interop
+
+| Feature | Status |
+|---------|--------|
+| Basic Interop | :heavy_check_mark: |
+
+If Spruce programs are going to do anything in the outside world, they need to
+be able to call the JS APIs of whatever environment (browser, node, etc)
+they're running in, and that means interop. Ideally most programmers can rely
+on libraries to do this heavy lifting and won't to have to touch iterop
+themselves, but nonetheless is has to go somewhere.
+
 ## Parser
 
 | Feature | Status |
@@ -124,7 +140,7 @@ statements.
 | Indentation | :heavy_check_mark: |
 | Output Optimization | |
 
-The compiler currently however generates javascript that faithfully executes
+The compiler currently generates javascript that faithfully executes
 the instructions provided by the source Spruce. However, no optimization is
 done on this output, which is of course very important if we want anyone to
 seriously consider using Spruce. Compier optimization is a massive topic

@@ -200,3 +200,55 @@ main() {
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 }
+
+#[test]
+fn test_annotations() {
+    let pass_prog = "
+type FooBar(a, b) {
+    Foo(a)
+    Bar(b)
+}
+
+func(fb: FooBar(a, Bool)) -> Bool {
+    case fb {
+        Foo(v) -> True
+        Bar(b) -> b
+    }
+}
+";
+
+    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude.as_str(), String::from("prelude")), (pass_prog, String::from("Main"))];
+    let res = compile(files);
+    assert_eq!(res.is_ok(), true);
+
+    let fail_prog = "
+type FooBar(a, b) {
+    Foo(a)
+    Bar(b)
+}
+
+func(fb: FooBar(Bool, Int)) -> Bool {
+    case fb {
+        Foo(v) -> True
+        Bar(b) -> b
+    }
+}
+";
+
+    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude.as_str(), String::from("prelude")), (fail_prog, String::from("Main"))];
+    let res = compile(files);
+    assert_eq!(res.is_ok(), false);
+
+    let fail_prog = "
+badId(x: a) -> b {
+    x
+}
+";
+
+    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude.as_str(), String::from("prelude")), (fail_prog, String::from("Main"))];
+    let res = compile(files);
+    assert_eq!(res.is_ok(), false);
+}

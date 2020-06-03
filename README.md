@@ -36,6 +36,9 @@ Some of the things I want to see in Spruce:
   error messages I've ever seen. Good compiler messages can save trips to stack
   overflow, which is a huge productivity (and quality of life) improvement.
 
+Those are the respectable ideas. For the wholly _unrespectable_ ideas,
+[have a look in here](WackyIdeas.md).
+
 ### What does it look like?
 
 The following program computes primes below 1000:
