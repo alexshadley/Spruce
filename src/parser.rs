@@ -250,11 +250,23 @@ pub struct FuncNode {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct Prog {
+pub struct Module {
+    pub name: String,
+    pub imports: Vec<String>,
     pub interop_functions: Vec<InteropFuncNode>,
     pub functions: Vec<FuncNode>,
     pub definitions: Vec<StmtNode>,
     pub types: Vec<TypeNode>
+}
+
+impl Module {
+    pub fn extend(&mut self, other: Module) {
+        self.imports.extend(other.imports);
+        self.interop_functions.extend(other.interop_functions);
+        self.functions.extend(other.functions);
+        self.definitions.extend(other.definitions);
+        self.types.extend(other.types);
+    }
 }
 
 fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
@@ -677,74 +689,79 @@ fn to_type(t: Pair<Rule>, file_name: &String) -> TypeNode {
     }
 }
 
-fn to_ast(files: Vec<(Pairs<Rule>, String)>) -> Prog {
+fn to_ast(file: Pairs<Rule>, file_name: String) -> Module {
+    let mut imports = Vec::new();
     let mut stmts = Vec::new();
     let mut functions = Vec::new();
     let mut interop_functions = Vec::new();
     let mut types = Vec::new();
 
-    for (file, name) in files {
-        for element in file {
-            match element.as_rule() {
-                Rule::interop_decl => {
-                    interop_functions.push( to_interop(element, &name) );
-                }
-                Rule::function_decl => {
-                    functions.push( to_func(element, &name) );
-                }
-                Rule::assign => {
-                    stmts.push( to_stmt(element, &name) );
-                }
-                Rule::type_decl => {
-                    types.push( to_type(element, &name) );
-                }
-                Rule::EOI => (),
-                _ => unreachable!()
+    for element in file {
+        match element.as_rule() {
+            Rule::import => {
+                imports.push(String::from(
+                    element.into_inner().next().unwrap().as_str()
+                ));
             }
+            Rule::interop_decl => {
+                interop_functions.push( to_interop(element, &file_name) );
+            }
+            Rule::function_decl => {
+                functions.push( to_func(element, &file_name) );
+            }
+            Rule::assign => {
+                stmts.push( to_stmt(element, &file_name) );
+            }
+            Rule::type_decl => {
+                types.push( to_type(element, &file_name) );
+            }
+            Rule::EOI => (),
+            _ => unreachable!()
         }
     }
 
-    Prog {
+    // all modules depend on the Prelude
+    imports.push(String::from("Prelude"));
+
+    Module {
+        name: file_name,
+        imports: imports,
         interop_functions: interop_functions,
         functions: functions,
         definitions: stmts,
         types: types
     }
+
 }
 
-pub fn parse(unparsed: Vec<(&str, String)>) -> Result<Prog, SpruceErr> {
-    let mut parse_results = Vec::new();
-    for (file, name) in unparsed {
-        let parsed = ExprParser::parse(Rule::file, &file);
-        match parsed {
-            Ok(pairs) => {
-                parse_results.push((pairs, name));
-            }
-            Err(e) => {
-                let err = match e.location {
-                    InputLocation::Pos(pos) => {
-                        SpruceErr {
-                            message: String::from("Parse error"),
-                            info: NodeInfo {
-                                span: Span {start: pos, end: pos},
-                                file: name.clone()
-                            }
+pub fn parse(unparsed: &str, file_name: String) -> Result<Module, SpruceErr> {
+    let parsed = ExprParser::parse(Rule::file, &unparsed);
+    match parsed {
+        Ok(pairs) => {
+            Ok(to_ast(pairs, file_name))
+        }
+        Err(e) => {
+            let err = match e.location {
+                InputLocation::Pos(pos) => {
+                    SpruceErr {
+                        message: String::from("Parse error"),
+                        info: NodeInfo {
+                            span: Span {start: pos, end: pos},
+                            file: file_name.clone()
                         }
                     }
-                    InputLocation::Span((start, end)) => {
-                        SpruceErr {
-                            message: String::from("Parse error"),
-                            info: NodeInfo {
-                                span: Span {start: start, end: end},
-                                file: name.clone()
-                            }
+                }
+                InputLocation::Span((start, end)) => {
+                    SpruceErr {
+                        message: String::from("Parse error"),
+                        info: NodeInfo {
+                            span: Span {start: start, end: end},
+                            file: file_name.clone()
                         }
                     }
-                };
-                return Err(err);
-            }
+                }
+            };
+            Err(err)
         }
     }
-
-    Ok(to_ast(parse_results))
 }

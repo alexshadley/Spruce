@@ -231,7 +231,7 @@ pub struct Prog {
 }
 
 
-pub fn name_analysis(prog: parser::Prog) -> Result<Prog, SpruceErr> {
+pub fn name_analysis(prog: parser::Module) -> Result<Prog, SpruceErr> {
     let mut type_table = analyze_types(&prog)?;
     let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
 
@@ -368,7 +368,7 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Prog) -> Result<(SymbolTable, Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
+fn collect_decls(prog: &parser::Module) -> Result<(SymbolTable, Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
     let mut table = SymbolTable::new();
     table.push_layer();
 
@@ -1009,7 +1009,7 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Prog) -> Result<TypeTable, SpruceErr>{
+fn analyze_types(prog: & parser::Module) -> Result<TypeTable, SpruceErr>{
     let mut type_table = TypeTable::new();
 
     for t in &prog.types {
