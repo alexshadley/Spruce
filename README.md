@@ -44,21 +44,11 @@ Those are the respectable ideas. For the wholly _unrespectable_ ideas,
 The following program computes primes below 1000:
 
 ```
-type Maybe(a) {
-    Just(a)
-    Nothing
-}
-
-type List(a) {
-    Cons(a, List(a))
-    Nil
-}
-
-filter(ls, fn) {
+filter(ls: List(a), fn: (a) -> Bool) -> List(a) {
     case ls {
-        Cons(v, rest) -> {
+        Cons(rest, v) -> {
             case fn(v) {
-                True -> Cons(v, filter(rest, fn))
+                True -> Cons(filter(rest, fn), v)
                 False -> filter(rest, fn)
             }
         }
@@ -66,31 +56,19 @@ filter(ls, fn) {
     }
 }
 
-filter2(ls, fn, firstArg) {
-    case ls {
-        Cons(v, rest) -> {
-            case fn(firstArg, v) {
-                True -> Cons(v, filter2(rest, fn, firstArg))
-                False -> filter2(rest, fn, firstArg)
-            }
-        }
-        Nil -> Nil
-    }
-}
-
-range(start, end) {
+range(start: Int, end: Int) -> List(Int) {
     case start < end {
-        True -> Cons(start, range(start + 1, end))
+        True -> Cons(range(start + 1, end), start)
         False -> Nil
     }
 }
 
-isPrime(n) {
+isPrime(n: Int) -> Bool {
     checkFactors = range(2, n)
-    factors = filter2(checkFactors, isFactor, n)
+    factors = filter(checkFactors, isFactor@(n, _))
 
     case factors {
-        Cons(val, rest) -> False
+        Cons(rest, val) -> False
         Nil -> True
     }
 }

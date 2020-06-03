@@ -10,18 +10,6 @@ filter(ls: List(a), fn: (a) -> Bool) -> List(a) {
     }
 }
 
-filter2(ls, fn, firstArg) {
-    case ls {
-        Cons(rest, v) -> {
-            case fn(firstArg, v) {
-                True -> Cons(filter2(rest, fn, firstArg), v)
-                False -> filter2(rest, fn, firstArg)
-            }
-        }
-        Nil -> Nil
-    }
-}
-
 range(start: Int, end: Int) -> List(Int) {
     case start < end {
         True -> Cons(range(start + 1, end), start)
