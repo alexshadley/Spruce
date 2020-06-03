@@ -31,7 +31,7 @@ range(start: Int, end: Int) -> List(Int) {
 
 isPrime(n: Int) -> Bool {
     checkFactors = range(2, n)
-    factors = filter2(checkFactors, isFactor, n)
+    factors = filter(checkFactors, isFactor@(n, _))
 
     case factors {
         Cons(rest, val) -> False
@@ -42,7 +42,6 @@ isPrime(n: Int) -> Bool {
 isFactor(x, y) {
     x % y == 0
 }
-
 
 main() {
     nums = range(3, 1000)

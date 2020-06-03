@@ -39,6 +39,7 @@ pub enum Expr {
     Pow(Box<ExprNode>, Box<ExprNode>),
     Mod(Box<ExprNode>, Box<ExprNode>),
     FnCall(SymbolID, Vec<Box<ExprNode>>),
+    Curry(SymbolID, Vec<Option<Box<ExprNode>>>),
     Id(SymbolID),
     ADTVal(ADTValID, Vec<Box<ExprNode>>),
     Lit(f64),
@@ -843,7 +844,30 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
                 }
             }
         }
+        parser::Expr::Curry(fn_name, args) => {
+            match table.lookup(&fn_name) {
+                Some(sym) => {
+                    let mut checked_args = Vec::new();
+                    for arg in args {
+                        match arg {
+                            Some(a) => {
+                                let checked = check_expr(table, types, &*a)?;
+                                checked_args.push(Some(Box::from(checked)));
+                            }
+                            None => {
+                                checked_args.push(None)
+                            }
+                        }
+                    }
 
+                    Ok(Expr::Curry(sym.id, checked_args))
+                }
+
+                None => {
+                    return Err(undeclared(fn_name, expr.info.clone()));
+                }
+            }
+        }
 
     }?;
 

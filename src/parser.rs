@@ -56,6 +56,7 @@ pub enum Expr {
     Pow(Box<ExprNode>, Box<ExprNode>),
     Mod(Box<ExprNode>, Box<ExprNode>),
     FnCall(String, Vec<Box<ExprNode>>),
+    Curry(String, Vec<Option<Box<ExprNode>>>),
     Id(String),
     Lit(f64),
     Eq(Box<ExprNode>, Box<ExprNode>),
@@ -291,6 +292,30 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
 
                 ExprNode {
                     val: Expr::FnCall(id, args),
+                    info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
+                }
+            }
+            Rule::curry => {
+                let pair_span = pair.as_span();
+
+                let mut children = pair.into_inner();
+                let id = String::from(children.next().unwrap().as_str());
+                let args = children.into_iter().map(|arg| {
+                    match arg.as_rule() {
+                        Rule::expr => {
+                            Some(Box::from(
+                                to_expr(arg, file_name)
+                            ))
+                        }
+                        Rule::blank => {
+                            None
+                        }
+                        _ => unreachable!()
+                    }
+                }).collect();
+
+                ExprNode {
+                    val: Expr::Curry(id, args),
                     info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
                 }
             }

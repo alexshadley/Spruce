@@ -42,12 +42,17 @@ case_pattern = { up_id ~ ( "(" ~ lo_id ~ ( "," ~ lo_id )*  ~ ")")? }
 body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
 
 expr = { term ~ (operation ~ term)* }
-term = _{ fn_call | val_call | id | num | "(" ~ expr ~ ")" }
+term = _{ curry | fn_call | val_call | id | num | "(" ~ expr ~ ")" }
 
 // we have to allow interop_id here, but that feels gross. There's almost
 // certainly a better approach
 fn_call = { interop_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
 val_call = { up_id ~ "(" ~ (expr ~ ("," ~ expr)* )? ~ ")" }
+
+// very experimental implementation of currying
+curry = { interop_id ~ "@" ~ "(" ~ (curry_arg ~ ("," ~ curry_arg)* )? ~ ")" }
+curry_arg = _{ expr | blank }
+blank = { "_" }
 
 id = _{ up_id | lo_id }
 up_id = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }

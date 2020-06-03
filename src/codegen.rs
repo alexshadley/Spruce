@@ -22,8 +22,6 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     for func in &prog.functions {
         write!(out, "{}", gen_func(prog, env, func, 0)).expect("failed to write line");
     }
-
-    write!(out, "\nconsole.log(main())").expect("failed to write line");
 }
 
 fn gen_type(prog: &Prog, env: &Environment, t: &ADT) -> String {
@@ -296,6 +294,47 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
 
                 format!("{}]", output)
             }
+        }
+        Expr::Curry(fn_id, args) => {
+            let mut output = String::from("function(");
+
+            let num_blank = args.iter().filter(|arg| arg.is_none() ).count();
+            let arg_nums: Vec<usize> = (0..num_blank).collect();
+
+            arg_nums.first().as_ref().map(|arg_num| {
+                output = format!("{}_arg{}", output, arg_num);
+            });
+            for arg_num in arg_nums.iter().skip(1) {
+                output = format!("{}, _arg{}", output, arg_num);
+            };
+
+            output = format!("{}) {{ return {}(", output, gen_sym(&prog.symbol_table, fn_id).to_owned());
+
+            let mut arg_num = 0;
+            args.first().as_ref().map(|arg| {
+                match arg {
+                    Some(expr) => {
+                        output = format!("{}{}", output, gen_expr(prog, expr));
+                    }
+                    None => {
+                        output = format!("{}_arg{}", output, arg_num);
+                        arg_num += 1;
+                    }
+                }
+            });
+            for arg in args.iter().skip(1) {
+                match arg {
+                    Some(expr) => {
+                        output = format!("{}, {}", output, gen_expr(prog, expr));
+                    }
+                    None => {
+                        output = format!("{}, _arg{}", output, arg_num);
+                        arg_num += 1;
+                    }
+                }
+            };
+
+            format!("{});}}", output)
         }
     }
 }
