@@ -232,23 +232,27 @@ pub struct Prog {
 
 
 pub fn name_analysis(modules: Vec<parser::Module>) -> Result<Prog, SpruceErr> {
+    let mut type_table = TypeTable::new();
+    let mut sym_table = SymbolTable::new();
+    sym_table.push_layer();
+
+    let mut defs = Vec::new();
+    let mut interops = Vec::new();
+    let mut funcs = Vec::new();
 
     for module in modules {
-        let mut type_table = analyze_types(&prog)?;
-        let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
+        analyze_types(&module, &mut type_table)?;
+        let (interop_ids, fn_ids, targets) = collect_decls(&module, &mut sym_table)?;
 
-        let mut defs = Vec::new();
-        for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
+        for (def, target) in module.definitions.iter().zip(targets.into_iter()) {
             defs.push(check_global(&mut sym_table, &type_table, def, target)?);
         }
 
-        let mut interops = Vec::new();
-        for (interop, id) in prog.interop_functions.iter().zip(interop_ids.into_iter()) {
+        for (interop, id) in module.interop_functions.iter().zip(interop_ids.into_iter()) {
             interops.push(check_interop(&mut sym_table, &mut type_table, interop, id)?);
         }
 
-        let mut funcs = Vec::new();
-        for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
+        for (func, id) in module.functions.iter().zip(fn_ids.into_iter()) {
             funcs.push(check_function(&mut sym_table, &mut type_table, func, id)?);
         }
     }
@@ -371,9 +375,7 @@ impl SymbolTable {
 }
 
 /// collects top-level name declarations
-fn collect_decls(prog: &parser::Module) -> Result<(SymbolTable, Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
-    let mut table = SymbolTable::new();
-    table.push_layer();
+fn collect_decls(prog: &parser::Module, table: &mut SymbolTable) -> Result<(Vec<SymbolID>, Vec<SymbolID>, Vec<TargetNode>), SpruceErr> {
 
     let mut interop_ids = Vec::new();
     for func in &prog.interop_functions {
@@ -429,7 +431,7 @@ fn collect_decls(prog: &parser::Module) -> Result<(SymbolTable, Vec<SymbolID>, V
         });
     }
     
-    Ok((table, interop_ids, fn_ids, tgts))
+    Ok((interop_ids, fn_ids, tgts))
 }
 
 fn check_global(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNode, tgt: TargetNode) -> Result<StmtNode, SpruceErr> {
@@ -1012,10 +1014,8 @@ impl TypeTable {
 
 /// Makes two passes, first over types and second over their values this is
 /// because values might contain other ADTs
-fn analyze_types(prog: & parser::Module) -> Result<TypeTable, SpruceErr>{
-    let mut type_table = TypeTable::new();
-
-    for t in &prog.types {
+fn analyze_types(module: &parser::Module, type_table: &mut TypeTable) -> Result<bool, SpruceErr>{
+    for t in &module.types {
         if type_table.has_type(&t.val.name) {
             return Err(double_decl(&t.val.name, t.info.clone()))
         }
@@ -1035,7 +1035,7 @@ fn analyze_types(prog: & parser::Module) -> Result<TypeTable, SpruceErr>{
         type_table.add_type(&t.val.name, params);
     }
 
-    for t in &prog.types {
+    for t in &module.types {
         let type_symbol = type_table.get_type(&t.val.name).expect("unreachable");
         let params: HashMap<String, TParamID> = type_symbol.type_params.iter().map(|id| {
             let tparam = type_table.get_tparam(id).expect("unreachable");
@@ -1058,7 +1058,7 @@ fn analyze_types(prog: & parser::Module) -> Result<TypeTable, SpruceErr>{
         }
     }
 
-    Ok(type_table)
+    Ok(true)
 }
 
 fn check_type_identifier(ident: &parser::TypeIdentifier, params: &HashMap<String, TParamID>, type_table: &TypeTable, info: &NodeInfo) -> Result<TypeID, SpruceErr> {

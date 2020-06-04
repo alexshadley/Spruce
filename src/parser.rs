@@ -720,11 +720,17 @@ fn to_ast(file: Pairs<Rule>, file_name: String) -> Module {
         }
     }
 
-    // all modules depend on the Prelude
-    imports.push(String::from("Prelude"));
+
+    // all modules depend on the Prelude except Prelude itself
+    if file_name != "Prelude.sp" {
+        imports.push(String::from("Prelude"));
+    }
+
+    // strip off '.sp'
+    let mod_name = &file_name[..(file_name.len() - 3)];
 
     Module {
-        name: file_name,
+        name: String::from(mod_name),
         imports: imports,
         interop_functions: interop_functions,
         functions: functions,

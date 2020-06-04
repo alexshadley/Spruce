@@ -1,3 +1,5 @@
+#![feature(str_strip)]
+
 #[macro_use]
 extern crate pest_derive;
 
@@ -26,9 +28,9 @@ fn main() {
     let spruce_code: &String = &args[1];
     let spruce_path = Path::new(spruce_code);
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
     let unparsed_file = fs::read_to_string(spruce_path).expect(&format!("Cannot find file {}", spruce_code));
-    let files = vec![(prelude, String::from("Prelude")), (unparsed_file, String::from("Main"))];
+    let files = vec![(prelude, String::from("Prelude.sp")), (unparsed_file, spruce_code.clone())];
 
     let (analyzed_prog, environment) = match compile(files.clone()){
         Ok(r) => r,
@@ -57,7 +59,7 @@ pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typ
 
         for import in &parsed.imports {
             if !imports.contains(import) {
-                let unparsed_file = fs::read_to_string(format!("{}.sp", import)).expect(&format!("Cannot find file {}", import));
+                let unparsed_file = fs::read_to_string(format!("{}.sp", import)).expect(&format!("Cannot find file {}.sp", import));
                 unparsed_files.push((unparsed_file, import.clone()));
             }
         }
@@ -66,13 +68,9 @@ pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typ
         parsed_files.push(parsed);
     }
 
-    let mut parsed_iter = parsed_files.into_iter();
-    let mut prog = parsed_iter.next().expect("unreachable");
-    for parsed in parsed_iter {
-        prog.extend(parsed)
-    }
+    let ordered_modules = import_analysis::order_modules(parsed_files);
 
-    let analyzed_prog = name_analysis::name_analysis(prog)?;
+    let analyzed_prog = name_analysis::name_analysis(ordered_modules)?;
     println!("{:#?}", analyzed_prog);
 
     let environment = typecheck::check_prog(&analyzed_prog)?;
@@ -83,8 +81,8 @@ pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typ
 
 #[test]
 fn test_prelude() {
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 }
@@ -106,8 +104,8 @@ g() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(pass_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(pass_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 
@@ -126,8 +124,8 @@ f(b) {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(fail_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(fail_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 }
@@ -155,8 +153,8 @@ g() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(pass_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(pass_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 
@@ -167,8 +165,8 @@ f() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(fail_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(fail_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 }
@@ -186,8 +184,8 @@ main() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(pass_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(pass_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 
@@ -202,8 +200,8 @@ main() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(pass_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(pass_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 
@@ -218,8 +216,8 @@ main() {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(fail_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(fail_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 }
@@ -240,8 +238,8 @@ func(fb: FooBar(a, Bool)) -> Bool {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(pass_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(pass_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), true);
 
@@ -259,8 +257,8 @@ func(fb: FooBar(Bool, Int)) -> Bool {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(fail_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(fail_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 
@@ -270,8 +268,8 @@ badId(x: a) -> b {
 }
 ";
 
-    let prelude = fs::read_to_string("src/prelude.sp").expect("cannot read prelude");
-    let files = vec![(prelude, String::from("prelude")), (String::from(fail_prog), String::from("Main"))];
+    let prelude = fs::read_to_string("src/Prelude.sp").expect("cannot read prelude");
+    let files = vec![(prelude, String::from("Prelude.sp")), (String::from(fail_prog), String::from("Main.sp"))];
     let res = compile(files);
     assert_eq!(res.is_ok(), false);
 }
