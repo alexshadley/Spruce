@@ -130,6 +130,17 @@ they're running in, and that means interop. Ideally most programmers can rely
 on libraries to do this heavy lifting and won't to have to touch iterop
 themselves, but nonetheless is has to go somewhere.
 
+## Modules
+
+| Feature | Status |
+|---------|--------|
+| Basic Modules | :heavy_check_mark: |
+| Module Namespacing | |
+
+Spruce does _technically_ have modules, but they need a lot of work! All of
+the modules currently share the same namespace, which is unsustainable in the
+long run.
+
 ## Parser
 
 | Feature | Status |
