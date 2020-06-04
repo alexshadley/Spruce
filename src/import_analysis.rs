@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use crate::parser::*;
-use crate::error::SpruceErr;
 
 // performs a topological sort on a list of modules, returning the sorted list
 pub fn order_modules(mods: Vec<Module>) -> Vec<Module> {

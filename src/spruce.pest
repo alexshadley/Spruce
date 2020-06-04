@@ -3,7 +3,8 @@ file = _{ SOI ~ (top_stmt | empty_line)* ~ EOI }
 top_stmt = _{ ( import | interop_decl | function_decl | type_decl | assign ) ~ "\n" }
 stmt = _{ ( assign | fn_call | case ) ~ "\n" }
 
-import = { "import" ~ up_id }
+import = { "import" ~ import_name }
+import_name = @{ ( ASCII_ALPHANUMERIC | "_" | "/" )+ }
 
 type_decl = { "type" ~ up_id ~ type_params ~ "{\n" ~ (type_option ~ "\n")+ ~ "}" }
 type_params = { ("(" ~ lo_id ~ ("," ~ lo_id)* ~ ")")? }

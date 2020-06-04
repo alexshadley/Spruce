@@ -59,8 +59,9 @@ pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typ
 
         for import in &parsed.imports {
             if !imports.contains(import) {
-                let unparsed_file = fs::read_to_string(format!("{}.sp", import)).expect(&format!("Cannot find file {}.sp", import));
-                unparsed_files.push((unparsed_file, import.clone()));
+                let import_file = format!("{}.sp", import);
+                let unparsed_file = fs::read_to_string(import_file.clone()).expect(&format!("Cannot find file {}", import_file));
+                unparsed_files.push((unparsed_file, import_file));
             }
         }
 
