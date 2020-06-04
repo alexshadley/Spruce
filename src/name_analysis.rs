@@ -231,23 +231,26 @@ pub struct Prog {
 }
 
 
-pub fn name_analysis(prog: parser::Module) -> Result<Prog, SpruceErr> {
-    let mut type_table = analyze_types(&prog)?;
-    let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
+pub fn name_analysis(modules: Vec<parser::Module>) -> Result<Prog, SpruceErr> {
 
-    let mut defs = Vec::new();
-    for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
-        defs.push(check_global(&mut sym_table, &type_table, def, target)?);
-    }
+    for module in modules {
+        let mut type_table = analyze_types(&prog)?;
+        let (mut sym_table, interop_ids, fn_ids, targets) = collect_decls(&prog)?;
 
-    let mut interops = Vec::new();
-    for (interop, id) in prog.interop_functions.iter().zip(interop_ids.into_iter()) {
-        interops.push(check_interop(&mut sym_table, &mut type_table, interop, id)?);
-    }
+        let mut defs = Vec::new();
+        for (def, target) in prog.definitions.iter().zip(targets.into_iter()) {
+            defs.push(check_global(&mut sym_table, &type_table, def, target)?);
+        }
 
-    let mut funcs = Vec::new();
-    for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
-        funcs.push(check_function(&mut sym_table, &mut type_table, func, id)?);
+        let mut interops = Vec::new();
+        for (interop, id) in prog.interop_functions.iter().zip(interop_ids.into_iter()) {
+            interops.push(check_interop(&mut sym_table, &mut type_table, interop, id)?);
+        }
+
+        let mut funcs = Vec::new();
+        for (func, id) in prog.functions.iter().zip(fn_ids.into_iter()) {
+            funcs.push(check_function(&mut sym_table, &mut type_table, func, id)?);
+        }
     }
     
     sym_table.pop_layer();
