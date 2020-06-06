@@ -61,7 +61,8 @@ id = _{ up_id | lo_id }
 up_id = @{ ASCII_ALPHA_UPPER ~ ASCII_ALPHANUMERIC* }
 lo_id = @{ ASCII_ALPHA_LOWER ~ ASCII_ALPHANUMERIC* }
 
-empty_line = _{ "\n" }
+// also allows comments
+empty_line = _{ "\n" | "//" ~ (!"\n" ~ ANY)* ~ "\n"}
 
 num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
     int = { ("+" | "-")? ~ ASCII_DIGIT+ }
@@ -93,3 +94,4 @@ operation = _{ concat | add | subtract | multiply | divide | power | modulus | e
     gt       = { ">" }
 
 WHITESPACE = _{ " " | "\t" }
+COMMENT = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
