@@ -947,7 +947,7 @@ pub struct TypeTableExt {
 impl TypeTable {
     fn new() -> Self {
         // TODO: figure out the proper way to do this in rust
-        let primitives = vec![String::from("Int"), String::from("Float"), String::from("Char")];
+        let primitives = vec![String::from("Int"), String::from("Float"), String::from("String")];
 
         TypeTable {
             next_type_id: 0,

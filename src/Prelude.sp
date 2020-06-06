@@ -1,4 +1,4 @@
-interop console.log(x: Int) -> ()
+interop console.log(x: String) -> ()
 
 type Bool {
     True
