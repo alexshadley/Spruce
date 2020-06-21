@@ -89,6 +89,18 @@ pub struct BodyNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct While {
+    pub expr: ExprNode,
+    pub body: BodyNode
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WhileNode {
+    pub val: While,
+    pub info: NodeInfo
+}
+
+#[derive(Debug, PartialEq)]
 pub struct Case {
     pub expr: ExprNode,
     pub options: Vec<CaseOptionNode>
@@ -155,7 +167,8 @@ pub struct ValuedNode {
 pub enum Stmt {
     Assign(TargetNode, ExprNode),
     FnCall(String, Vec<ExprNode>),
-    Case(CaseNode)
+    Case(CaseNode),
+    While(WhileNode)
 }
 
 #[derive(Debug, PartialEq)]
@@ -373,7 +386,7 @@ fn to_body(body: Pair<Rule>, file_name: &String) -> BodyNode {
     let mut expr = Option::None;
     for element in body.into_inner() {
         match element.as_rule() {
-            Rule::assign | Rule::fn_call | Rule::case => {
+            Rule::while_stmt | Rule::assign | Rule::fn_call | Rule::case => {
                 stmts.push(to_stmt(element, file_name));
             }
             Rule::expr => {
@@ -489,6 +502,21 @@ fn to_stmt(stmt: Pair<Rule>, file_name: &String) -> StmtNode {
         }
         Rule::case => {
             Stmt::Case(to_case(stmt, file_name))
+        }
+        Rule::while_stmt => {
+            let mut children = stmt.into_inner();
+            let expr = children.next().unwrap();
+            let body = children.next().unwrap();
+
+            let while_node = WhileNode {
+                val: While {
+                    expr: to_expr(expr, file_name),
+                    body: to_body(body, file_name)
+                },
+                info: NodeInfo {span: Span::from(stmt_span.clone()), file: file_name.clone()}
+            };
+
+            Stmt::While(while_node)
         }
         _ => {
             println!("rule {:?} encountered", stmt.as_rule());

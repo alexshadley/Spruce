@@ -1,7 +1,7 @@
 file = _{ SOI ~ (top_stmt | empty_line)* ~ EOI }
 
 top_stmt = _{ ( import | interop_decl | function_decl | type_decl | assign ) ~ "\n" }
-stmt = _{ ( assign | fn_call | case ) ~ "\n" }
+stmt = _{ ( while_stmt | assign | fn_call | case ) ~ "\n" }
 
 import = { "import" ~ import_name }
 import_name = @{ ( ASCII_ALPHANUMERIC | "_" | "/" )+ }
@@ -41,6 +41,8 @@ valued = _{ case | expr }
 case = { "case" ~ expr ~ "{\n" ~ case_option+ ~ "}" }
 case_option = { case_pattern ~ "->" ~ (expr | "{\n" ~ body ~ "}") ~ "\n" }
 case_pattern = { up_id ~ ( "(" ~ lo_id ~ ( "," ~ lo_id )*  ~ ")")? }
+
+while_stmt = { "while" ~ expr ~ "{\n" ~ body ~ "}" }
 
 body = { (stmt | empty_line)* ~ (valued ~ "\n")? }
 

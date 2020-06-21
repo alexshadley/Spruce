@@ -558,6 +558,22 @@ fn check_body(env: &mut Environment, body: &na::BodyNode, ty: &Type) -> Result<T
                 stmt_types.push(var_type);
                 subs.extend(case_subs);
             }
+            na::Stmt::While(while_node) => {
+                // verify that the while expr has type bool
+                let expr_subs = typecheck(env, &while_node.val.expr, &Type::ADT(env.internal_types.bool_id, vec![]))?;
+                env.apply_subs(&expr_subs);
+                subs.extend(expr_subs);
+
+                // body needs an expected type, but we don't care about the
+                // type of a while loop. This is a throwaway
+                let body_tvar = env.new_tvar();
+                let body_subs = check_body(env, &while_node.val.body, &body_tvar)?;
+                env.apply_subs(&body_subs);
+                subs.extend(body_subs);
+
+                // while loop has no type
+                stmt_types.push(Type::Unit);
+            }
             // it's annoying that fn call doesn't carry a single expr; we
             // might want to make this change soon
             na::Stmt::FnCall(id, args) => {

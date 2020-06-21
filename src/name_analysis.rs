@@ -72,6 +72,19 @@ pub struct BodyNode {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct While {
+    pub expr: ExprNode,
+    pub body: BodyNode
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WhileNode {
+    pub val: While,
+    pub info: NodeInfo
+}
+
+
+#[derive(Debug, PartialEq)]
 pub struct Case {
     pub id: CaseID,
     pub expr: ExprNode,
@@ -136,7 +149,8 @@ pub struct ValuedNode {
 pub enum Stmt {
     Assign(TargetNode, ExprNode),
     FnCall(SymbolID, Vec<ExprNode>),
-    Case(CaseNode)
+    Case(CaseNode),
+    While(WhileNode)
 }
 
 #[derive(Debug, PartialEq)]
@@ -627,6 +641,15 @@ fn check_stmt(table: &mut SymbolTable, types: &TypeTable, stmt: &parser::StmtNod
             Stmt::Case(CaseNode {
                 val: Case {id: id, expr: expr, options: options},
                 info: case.info.clone()
+            })
+        }
+        parser::Stmt::While(while_node) => {
+            let expr = check_expr(table, types, &while_node.val.expr)?;
+            let body = check_body(table, types, &while_node.val.body)?;
+
+            Stmt::While(WhileNode {
+                val: While {expr: expr, body: body},
+                info: while_node.info.clone()
             })
         }
         parser::Stmt::FnCall(name, args) => {

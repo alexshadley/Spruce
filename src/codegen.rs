@@ -113,6 +113,10 @@ fn gen_stmt(prog: &Prog, env: &Environment, stmt: &StmtNode, indent: usize) -> (
 
             (format!("{});\n", output), Some(String::from("_fn_val")))
         }
+        Stmt::While(while_node) => {
+            let (body_output, _) = gen_body(prog, env, &while_node.val.body, indent + 1);
+            (format!("while({}[0] == Bool.TRUE) {{\n{}}}", gen_expr(prog, &while_node.val.expr), body_output), None)
+        }
     }
 }
 
