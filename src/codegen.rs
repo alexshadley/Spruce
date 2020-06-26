@@ -22,8 +22,6 @@ pub fn gen_prog(out: &mut fs::File, prog: &Prog, env: &Environment) {
     for func in &prog.functions {
         write!(out, "{}", gen_func(prog, env, func, 0)).expect("failed to write line");
     }
-
-    write!(out, "main();").expect("failed to write final stmt");
 }
 
 fn gen_type(prog: &Prog, env: &Environment, t: &ADT) -> String {
