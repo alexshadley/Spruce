@@ -837,7 +837,6 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
 }
 
 fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr> {
-    //println!("unification on: {} and {}", left.as_str_debug(), right.as_str_debug());
     match (left, right) {
         (Type::TVar(id1), Type::TVar(id2)) => {
             if id1 == id2 {
@@ -908,6 +907,8 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
 
         }
 
+        (Type::Unit, Type::Unit) => Some(HashMap::new()),
+
         _ => None
     }.ok_or(SpruceErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
 }
@@ -955,6 +956,14 @@ fn unify_prim() {
 
     let res = unify(&int_prim!(), &Type::Prim(String::from("Float")), &test_info);
     assert_eq!(res.is_ok(), false);
+}
+
+#[test]
+fn unify_unit() {
+    let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
+
+    let res = unify(&Type::Unit, &Type::Unit, &test_info);
+    assert_eq!(res.is_ok(), true);
 }
 
 #[test]
