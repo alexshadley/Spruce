@@ -34,7 +34,7 @@ fn main() {
 
     let (analyzed_prog, environment) = match compile(files.clone()){
         Ok(r) => r,
-        Err(e) => {
+        Err((e, files)) => {
             println!("{}", e.as_str(&files));
             return;
         }
@@ -44,17 +44,21 @@ fn main() {
     codegen::gen_prog(&mut out_file, &analyzed_prog, &environment);
 }
 
-pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typecheck::Environment), error::SpruceErr> {
+pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typecheck::Environment), (error::SpruceErr, Vec<(String, String)>)> {
     let mut imports: HashSet<String> = HashSet::from_iter(vec![String::from("Prelude")].into_iter());
-    let mut unparsed_files = files;
+    let mut unparsed_files = files.clone();
     let mut parsed_files = Vec::new();
+
+    // used in error reporting
+    let mut all_files = files;
 
     // each iteration takes a file off the stack, parses, finds all files that need to
     // be imported, then adds those to the stack
     while unparsed_files.len() > 0 {
         let (file, name) = unparsed_files.pop().expect("unreachable");
+        all_files.push((file.clone(), name.clone()));
 
-        let parsed = parser::parse(file.as_str(), name)?;
+        let parsed = parser::parse(file.as_str(), name).map_err(|err| (err, all_files.clone()) )?;
         println!("{:#?}", parsed);
 
         for import in &parsed.imports {
@@ -71,10 +75,10 @@ pub fn compile(files: Vec<(String, String)>) -> Result<(name_analysis::Prog, typ
 
     let ordered_modules = import_analysis::order_modules(parsed_files);
 
-    let analyzed_prog = name_analysis::name_analysis(ordered_modules)?;
+    let analyzed_prog = name_analysis::name_analysis(ordered_modules).map_err(|err| (err, all_files.clone()) )?;
     println!("{:#?}", analyzed_prog);
 
-    let environment = typecheck::check_prog(&analyzed_prog)?;
+    let environment = typecheck::check_prog(&analyzed_prog).map_err(|err| (err, all_files.clone()) )?;
     println!("{}", environment.as_str(&analyzed_prog));
 
     Ok((analyzed_prog, environment))
