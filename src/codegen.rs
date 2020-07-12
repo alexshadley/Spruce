@@ -273,16 +273,32 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
         Expr::StringLit(s)=> format!("{}", s),
         Expr::Id(id) => gen_sym(&prog.symbol_table, id),
         Expr::FnCall(fn_id, args) => {
-            let mut output = format!("{}(", gen_sym(&prog.symbol_table, fn_id).to_owned());
+            if *fn_id == prog.internal_types.dict_empty_id {
+                String::from("{}")
+            }
+            else if *fn_id == prog.internal_types.dict_get_id {
+                format!("({} in {} ? [Maybe.JUST, {}[{}]] : [Maybe.NOTHING])",
+                    gen_expr(prog, &args[1]),
+                    gen_expr(prog, &args[0]),
+                    gen_expr(prog, &args[0]),
+                    gen_expr(prog, &args[1]),
+                )
+            }
+            else if *fn_id == prog.internal_types.dict_set_id {
+                format!("_set_and_copy({}, {}, {})", gen_expr(prog, &args[0]), gen_expr(prog, &args[1]), gen_expr(prog, &args[2]))
+            }
+            else {
+                let mut output = format!("{}(", gen_sym(&prog.symbol_table, fn_id).to_owned());
 
-            args.first().as_ref().map(|arg| {
-                output = format!("{}{}", output, gen_expr(prog, arg));
-            });
-            for arg in args.iter().skip(1) {
-                output = format!("{}, {}", output, gen_expr(prog, arg));
-            };
+                args.first().as_ref().map(|arg| {
+                    output = format!("{}{}", output, gen_expr(prog, arg));
+                });
+                for arg in args.iter().skip(1) {
+                    output = format!("{}, {}", output, gen_expr(prog, arg));
+                };
 
-            format!("{})", output)
+                format!("{})", output)
+            }
         }
         Expr::ADTVal(base, args) => {
             if *base == prog.internal_types.cons_id {

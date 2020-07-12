@@ -991,7 +991,7 @@ fn unify_fn() {
 #[test]
 fn typecheck_adt() {
     let test_info = NodeInfo {span: Span {start: 0, end: 0}, file: String::from("")};
-    let test_it = na::InternalTypes {bool_id: 0, maybe_id: 1, list_id: 2, cons_id: 0, nil_id: 1};
+    let test_it = na::InternalTypes {bool_id: 0, maybe_id: 1, list_id: 2, cons_id: 0, nil_id: 1, dict_id: 10, dict_empty_id: 11, dict_get_id: 12, dict_set_id: 13};
 
     let mut env = Environment::new(test_it);
     env.val_type.insert(0, Type::Func(vec![Box::from(Type::TVar(0))], Box::from(Type::ADT(1, vec![Box::from(Type::TVar(0))]))));

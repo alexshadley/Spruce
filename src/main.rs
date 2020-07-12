@@ -25,6 +25,11 @@ mod codegen;
 /// Code Generation writes the compiled javascript to a file
 fn main() {
     let args: Vec<String> = env::args().collect();
+    if args.len() != 3 {
+        println!("usage: spc <source> <output>");
+        return;
+    }
+
     let spruce_code: &String = &args[1];
     let spruce_path = Path::new(spruce_code);
 
@@ -40,7 +45,8 @@ fn main() {
         }
     };
 
-    let mut out_file = fs::File::create("out.js").expect("failed to create file");
+    let out_file_name = &args[2];
+    let mut out_file = fs::File::create(out_file_name).expect("failed to create file");
     codegen::gen_prog(&mut out_file, &analyzed_prog, &environment);
 }
 

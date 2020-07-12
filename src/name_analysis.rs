@@ -228,10 +228,15 @@ pub struct FuncNode {
 pub struct InternalTypes {
     pub bool_id: ADTID,
     pub maybe_id: ADTID,
+    pub dict_id: ADTID,
 
     pub list_id: ADTID,
     pub cons_id: ADTValID,
-    pub nil_id: ADTValID
+    pub nil_id: ADTValID,
+
+    pub dict_empty_id: SymbolID,
+    pub dict_get_id: SymbolID,
+    pub dict_set_id: SymbolID
 }
 
 #[derive(Debug, PartialEq)]
@@ -276,9 +281,15 @@ pub fn name_analysis(modules: Vec<parser::Module>) -> Result<Prog, SpruceErr> {
     let internal_types = InternalTypes {
         bool_id: type_table.get_type(&String::from("Bool")).expect("Could not find Bool id").id,
         maybe_id: type_table.get_type(&String::from("Maybe")).expect("Could not find Maybe id").id,
+
         list_id: type_table.get_type(&String::from("List")).expect("Could not find List id").id,
         cons_id: type_table.get_value(&String::from("Cons")).expect("Could not find Cons id").id,
         nil_id: type_table.get_value(&String::from("Nil")).expect("Could not find Nil id").id,
+
+        dict_id: type_table.get_type(&String::from("Dict")).expect("Could not find Dict id").id,
+        dict_empty_id: sym_table.name_store.get(&String::from("dictEmpty")).expect("Could not find dictEmpty id").id,
+        dict_get_id: sym_table.name_store.get(&String::from("dictGet")).expect("Could not find dictGet id").id,
+        dict_set_id: sym_table.name_store.get(&String::from("dictSet")).expect("Could not find dictSet id").id,
     };
 
     let out_prog = Prog {
@@ -295,14 +306,14 @@ pub fn name_analysis(modules: Vec<parser::Module>) -> Result<Prog, SpruceErr> {
 pub type SymbolID = u32;
 pub type CaseID = u32;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SymbolType {
     Const,
     Mutable,
     Function
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Symbol {
     pub id: SymbolID,
     pub name: String,
@@ -316,12 +327,14 @@ pub struct SymbolTable {
     next_id: SymbolID,
     next_case_id: CaseID,
     layers: Vec<SymbolLayer>,
-    pub store: HashMap<SymbolID, Symbol>
+    pub store: HashMap<SymbolID, Symbol>,
+    // name_store is only needed because we need names to find special functions used in codegen
+    name_store: HashMap<String, Symbol>
 }
 
 impl SymbolTable {
     fn new() -> Self {
-        SymbolTable { next_id: 0, next_case_id: 0, layers: vec![], store: HashMap::new() }
+        SymbolTable { next_id: 0, next_case_id: 0, layers: vec![], store: HashMap::new(), name_store: HashMap::new()}
     }
 
     fn push_layer(&mut self) {
@@ -331,8 +344,9 @@ impl SymbolTable {
 
     fn pop_layer(&mut self) {
         self.layers.pop().map(|mut layer| {
-            for (_, v) in layer.drain() {
-                self.store.insert(v.id, v);
+            for (name, v) in layer.drain() {
+                self.store.insert(v.id, v.clone());
+                self.name_store.insert(name, v);
             }
         });
     }
@@ -1035,7 +1049,7 @@ impl TypeTable {
     }
 }
 
-/// Makes two passes, first over types and second over their values this is
+/// Makes two passes, first over types and second over their values; this is
 /// because values might contain other ADTs
 fn analyze_types(module: &parser::Module, type_table: &mut TypeTable) -> Result<bool, SpruceErr>{
     for t in &module.types {
