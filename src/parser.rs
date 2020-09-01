@@ -26,6 +26,7 @@ lazy_static! {
             Operator::new(multiply, Left) | Operator::new(divide, Left),
             Operator::new(power, Right),
             Operator::new(concat, Left),
+            Operator::new(access, Left)
         ])
     };
 }
@@ -61,6 +62,7 @@ pub enum Expr {
     Id(String),
     Lit(f64),
     StringLit(String),
+    StructVal(Vec<(String, Box<ExprNode>)>),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
@@ -68,6 +70,7 @@ pub enum Expr {
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
     Concat(Box<ExprNode>, Box<ExprNode>),
+    Access(Box<ExprNode>, String)
 }
 
 #[derive(Debug, PartialEq)]
@@ -351,6 +354,32 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                     info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
                 }
             }
+            Rule::struct_val => {
+                let pair_span = pair.as_span();
+
+                let struct_fields = pair.into_inner().into_iter().map(|struct_field| {
+                    match struct_field.as_rule() {
+                        Rule::struct_val_field => {
+                            let mut field_children = struct_field.into_inner();
+                            let id = String::from(field_children.next().unwrap().as_str());
+                            let expr = field_children.next().unwrap();
+
+                            (
+                                id,
+                                Box::from(
+                                    to_expr(expr, file_name)
+                                )
+                            )
+                        }
+                        _ => unreachable!()
+                    }
+                }).collect();
+
+                ExprNode {
+                    val: Expr::StructVal(struct_fields),
+                    info: NodeInfo {span: Span::from(pair_span), file: file_name.clone()}
+                }
+            }
             _ => unreachable!(),
         },
         |lhs: ExprNode, op: Pair<Rule>, rhs: ExprNode| {
@@ -368,6 +397,15 @@ fn to_expr(expr: Pair<Rule>, file_name: &String) -> ExprNode {
                 Rule::lt       => Expr::Lt(Box::from(lhs), Box::from(rhs)),
                 Rule::gt       => Expr::Gt(Box::from(lhs), Box::from(rhs)),
                 Rule::concat   => Expr::Concat(Box::from(lhs), Box::from(rhs)),
+                Rule::access   => {
+                    let accessField = match rhs.val {
+                        Expr::Id(s) => s,
+                        // TODO: configure parsing to throw errors, implement error for this
+                        _ => unreachable!()
+                    };
+                    
+                    Expr::Access(Box::from(lhs), accessField)
+                }
                 _ => unreachable!(),
             };
 

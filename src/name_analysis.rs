@@ -44,6 +44,7 @@ pub enum Expr {
     ADTVal(ADTValID, Vec<Box<ExprNode>>),
     Lit(f64),
     StringLit(String),
+    StructVal(Vec<(String, Box<ExprNode>)>),
     Eq(Box<ExprNode>, Box<ExprNode>),
     NotEq(Box<ExprNode>, Box<ExprNode>),
     LtEq(Box<ExprNode>, Box<ExprNode>),
@@ -51,6 +52,7 @@ pub enum Expr {
     Lt(Box<ExprNode>, Box<ExprNode>),
     Gt(Box<ExprNode>, Box<ExprNode>),
     Concat(Box<ExprNode>, Box<ExprNode>),
+    Access(Box<ExprNode>, String)
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -866,6 +868,10 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
             let right = check_expr(table, types, &*r)?;
             Ok(Expr::Concat(Box::from(left), Box::from(right)))
         }
+        parser::Expr::Access(expr, field) => {
+            let checked_expr = check_expr(table, types, &*expr)?;
+            Ok(Expr::Access(Box::from(checked_expr), field.clone()))
+        }
 
         parser::Expr::FnCall(fn_name, args) => {
             match (table.lookup(&fn_name), types.get_value(&fn_name)) {
@@ -918,6 +924,15 @@ fn check_expr(table: &SymbolTable, types: &TypeTable, expr: &parser::ExprNode) -
                     return Err(undeclared(fn_name, expr.info.clone()));
                 }
             }
+        }
+        parser::Expr::StructVal(fields) => {
+            let mut checked_fields = Vec::new();
+            for (name, expr) in fields {
+                let checked = check_expr(table, types, expr)?;
+                checked_fields.push((name.clone(), Box::from(checked)));
+            }
+
+            Ok(Expr::StructVal(checked_fields))
         }
 
     }?;

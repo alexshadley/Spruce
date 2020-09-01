@@ -358,6 +358,9 @@ fn gen_expr(prog: &Prog, expr: &ExprNode) -> String {
 
             format!("{});}}", output)
         }
+        Expr::StructVal(fields) => {
+            unimplemented!();
+        }
     }
 }
 

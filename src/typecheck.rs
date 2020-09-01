@@ -16,6 +16,8 @@ pub enum Type {
     TVar(TVarID),
     // the ADT, followed by type params
     ADT(na::ADTID, Vec<Box<Type>>),
+    // list of named fields, followed by whether or not adding new fields is 'locked'
+    Struct(Vec<(String, Box<Type>)>, bool),
     Func(Vec<Box<Type>>, Box<Type>)
 }
 
@@ -59,6 +61,17 @@ impl Type {
                     format!("{})", output)
                 }
             }
+            Type::Struct(fields, _) => {
+                let mut output = String::from("[");
+
+                fields.first().as_ref().map(|(name, field_type)| {
+                    output = format!("{}{} = {}", output, name, field_type.as_str_inner(prog, tvar_names, next_name));
+                });
+                for (name, field_type) in fields.iter().skip(1) {
+                    output = format!("{}, {} = {}", output, name, field_type.as_str_inner(prog, tvar_names, next_name));
+                };
+                format!("{}]", output)
+            }
             Type::Func(args, out) => {
                 let mut output = String::from("(");
                 args.first().as_ref().map(|arg| {
@@ -94,6 +107,17 @@ impl Type {
                     };
                     format!("{})", output)
                 }
+            }
+            Type::Struct(fields, _) => {
+                let mut output = String::from("[");
+
+                fields.first().as_ref().map(|(name, field_type)| {
+                    output = format!("{}{} = {}", output, name, field_type.as_str_debug());
+                });
+                for (name, field_type) in fields.iter().skip(1) {
+                    output = format!("{}, {} = {}", output, name, field_type.as_str_debug());
+                };
+                format!("{}]", output)
             }
             Type::Func(args, out) => {
                 let mut output = String::from("(");
@@ -679,6 +703,12 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
             subs.extend(subs2);
             Ok(subs)
         }
+        na::Expr::Access(accessed_expr, field) => {
+            let access_type = Type::Struct(vec![(field.clone(), Box::from(ty.clone()))], false);
+
+            let subs = typecheck(env, &*accessed_expr, &access_type)?;
+            Ok(subs)
+        }
 
         na::Expr::Id(id) => {
             match env.get_sym_type(&id) {
@@ -796,6 +826,25 @@ fn typecheck(env: &mut Environment, expr: &na::ExprNode, ty: &Type) -> Result<TS
 
             Ok(subs)
         }
+
+        na::Expr::StructVal(fields) => {
+            let mut subs = HashMap::new();
+            let mut field_types = Vec::new();
+            for (name, field_type) in fields {
+                let field_tvar = env.new_tvar();
+                let field_subs = typecheck(env, &*field_type, &field_tvar)?;
+                field_types.push((name.clone(), Box::from(apply(&field_subs, field_tvar))));
+                subs.extend(field_subs);
+            }
+
+            // struct types resulting from struct values can't have extra fields added; set 'locked' to true
+            let struct_type = Type::Struct(field_types, true);
+
+            let struct_subs = unify(&ty, &struct_type, &expr.info)?;
+            subs.extend(struct_subs);
+
+            Ok(subs)
+        }
     }?;
 
     println!("subs: {:?}\ntype: {:?}\n", res, apply(&res, ty.clone()));
@@ -827,6 +876,13 @@ fn apply(subs: &TSubst, ty: Type) -> Type {
             let new_params = params.iter().map(|p| { Box::from(apply(subs, (**p).clone())) }).collect();
 
             Type::ADT(*id, new_params)
+        }
+        Type::Struct(fields, locked) => {
+            let new_fields = fields.iter().map(|(name, ty)| {
+                (name.clone(), Box::from(apply(subs, (**ty).clone())))
+            }).collect();
+
+            Type::Struct(new_fields, *locked)
         }
         Type::Func(args, out) => {
             let new_args = args.iter().map(|arg| { Box::from(apply(subs, (**arg).clone())) }).collect();
@@ -909,6 +965,42 @@ fn unify(left: &Type, right: &Type, info: &NodeInfo) -> Result<TSubst, SpruceErr
 
         (Type::Unit, Type::Unit) => Some(HashMap::new()),
 
+        (Type::Struct(fields1, locked1), Type::Struct(fields2, locked2)) => {
+            let eitherLocked = *locked1 || *locked2;
+
+            // it can't be very efficient to do this every time we unify structs
+            let struct1 = fields1.clone().into_iter().collect::<HashMap<_, _>>();
+            let struct2 = fields2.clone().into_iter().collect::<HashMap<_, _>>();
+
+            let keys1: HashSet<String> = HashSet::from_iter(struct1.keys().map(String::clone));
+            let keys2: HashSet<String> = HashSet::from_iter(struct2.keys().map(String::clone));
+
+            let only1Keys = keys1.difference(&keys2);
+            let only2Keys = keys2.difference(&keys1);
+            let bothKeys = keys1.union(&keys2);
+
+            if eitherLocked {
+                // if we've locked adding new columns, and one key set is not a subset of the other, unification fails
+                if only1Keys.count() > 0 && only2Keys.count() > 0 {
+                    None
+                }
+                else {
+                    let mut subs = HashMap::new();
+                    for k in bothKeys {
+                        subs.extend(
+                            unify(struct1.get(k).expect("unreachable"), struct2.get(k).expect("unreachable"), info)?
+                        );
+                    }
+                    Some(subs)
+                }
+            }
+            else {
+                // dammit, I think I've coded myself into a hole. Right now I don't have any way of representing the
+                // addition of new fields to an existing struct type in the return value of this function.
+                Some(HashMap::new())
+            }
+        }
+
         _ => None
     }.ok_or(SpruceErr {message: format!("Unification failed between {} and {}", left.as_str_debug(), right.as_str_debug()), info: info.clone()})
 }
@@ -923,6 +1015,14 @@ fn tvars(ty: &Type) -> HashSet<TVarID> {
             for p in tparams {
                 let param_vars = tvars(p);
                 vars.extend(param_vars);
+            }
+            vars
+        }
+        Type::Struct(fields, _) => {
+            let mut vars = HashSet::new();
+            for (_, ty) in fields {
+                let field_vars = tvars(ty);
+                vars.extend(field_vars);
             }
             vars
         }
